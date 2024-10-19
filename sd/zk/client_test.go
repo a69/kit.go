@@ -57,7 +57,7 @@ func TestNewClient(t *testing.T) {
 	if want, have := acl, clientImpl.acl; want[0] != have[0] {
 		t.Errorf("want %+v, have %+v", want, have)
 	}
-	if want, have := connectTimeout, clientImpl.connectTimeout; want != have {
+	if want, have := connectTimeout, clientImpl.clientConfig.connectTimeout; want != have {
 		t.Errorf("want %d, have %d", want, have)
 	}
 	if want, have := sessionTimeout, clientImpl.sessionTimeout; want != have {

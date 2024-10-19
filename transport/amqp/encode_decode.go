@@ -8,16 +8,16 @@ import (
 
 // DecodeRequestFunc extracts a user-domain request object from
 // an AMQP Delivery object. It is designed to be used in AMQP Subscribers.
-type DecodeRequestFunc func(context.Context, *amqp.Delivery) (request interface{}, err error)
+type DecodeRequestFunc[REQ any] func(context.Context, *amqp.Delivery) (request REQ, err error)
 
 // EncodeRequestFunc encodes the passed request object into
 // an AMQP Publishing object. It is designed to be used in AMQP Publishers.
-type EncodeRequestFunc func(context.Context, *amqp.Publishing, interface{}) error
+type EncodeRequestFunc[REQ any] func(context.Context, *amqp.Publishing, REQ) error
 
 // EncodeResponseFunc encodes the passed response object to
 // an AMQP Publishing object. It is designed to be used in AMQP Subscribers.
-type EncodeResponseFunc func(context.Context, *amqp.Publishing, interface{}) error
+type EncodeResponseFunc[RES any] func(context.Context, *amqp.Publishing, RES) error
 
 // DecodeResponseFunc extracts a user-domain response object from
 // an AMQP Delivery object. It is designed to be used in AMQP Publishers.
-type DecodeResponseFunc func(context.Context, *amqp.Delivery) (response interface{}, err error)
+type DecodeResponseFunc[RES any] func(context.Context, *amqp.Delivery) (response RES, err error)

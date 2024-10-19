@@ -12,8 +12,8 @@ import (
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
 
-	"github.com/go-kit/kit/endpoint"
-	natstransport "github.com/go-kit/kit/transport/nats"
+	"github.com/a69/kit.go/endpoint"
+	natstransport "github.com/a69/kit.go/transport/nats"
 )
 
 type TestResponse struct {
@@ -122,10 +122,10 @@ func TestSubscriberErrorEncoder(t *testing.T) {
 		return errors.New("dang")
 	}
 	handler := natstransport.NewSubscriber(
-		func(context.Context, interface{}) (interface{}, error) { return struct{}{}, errTeapot },
-		func(context.Context, *nats.Msg) (interface{}, error) { return struct{}{}, nil },
-		func(context.Context, string, *nats.Conn, interface{}) error { return nil },
-		natstransport.SubscriberErrorEncoder(func(_ context.Context, err error, reply string, nc *nats.Conn) {
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errTeapot },
+		func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
+		func(context.Context, string, *nats.Conn, struct{}) error { return nil },
+		natstransport.SubscriberErrorEncoder[struct{}, struct{}](func(_ context.Context, err error, reply string, nc *nats.Conn) {
 			var r TestResponse
 			r.Error = code(err).Error()
 
@@ -174,11 +174,11 @@ func TestMultipleSubscriberBefore(t *testing.T) {
 		done     = make(chan struct{})
 	)
 	handler := natstransport.NewSubscriber(
-		endpoint.Nop,
-		func(context.Context, *nats.Msg) (interface{}, error) {
+		endpoint.Nop[struct{}, struct{}],
+		func(context.Context, *nats.Msg) (struct{}, error) {
 			return struct{}{}, nil
 		},
-		func(_ context.Context, reply string, nc *nats.Conn, _ interface{}) error {
+		func(_ context.Context, reply string, nc *nats.Conn, _ struct{}) error {
 			b, err := json.Marshal(response)
 			if err != nil {
 				return err
@@ -186,12 +186,12 @@ func TestMultipleSubscriberBefore(t *testing.T) {
 
 			return c.Publish(reply, b)
 		},
-		natstransport.SubscriberBefore(func(ctx context.Context, _ *nats.Msg) context.Context {
+		natstransport.SubscriberBefore[struct{}, struct{}](func(ctx context.Context, _ *nats.Msg) context.Context {
 			ctx = context.WithValue(ctx, "one", 1)
 
 			return ctx
 		}),
-		natstransport.SubscriberBefore(func(ctx context.Context, _ *nats.Msg) context.Context {
+		natstransport.SubscriberBefore[struct{}, struct{}](func(ctx context.Context, _ *nats.Msg) context.Context {
 			if _, ok := ctx.Value("one").(int); !ok {
 				t.Error("Value was not set properly when multiple ServerBefores are used")
 			}
@@ -236,21 +236,21 @@ func TestMultipleSubscriberAfter(t *testing.T) {
 		done     = make(chan struct{})
 	)
 	handler := natstransport.NewSubscriber(
-		endpoint.Nop,
-		func(context.Context, *nats.Msg) (interface{}, error) {
+		endpoint.Nop[struct{}, struct{}],
+		func(context.Context, *nats.Msg) (struct{}, error) {
 			return struct{}{}, nil
 		},
-		func(_ context.Context, reply string, nc *nats.Conn, _ interface{}) error {
+		func(_ context.Context, reply string, nc *nats.Conn, _ struct{}) error {
 			b, err := json.Marshal(response)
 			if err != nil {
 				return err
 			}
 			return c.Publish(reply, b)
 		},
-		natstransport.SubscriberAfter(func(ctx context.Context, nc *nats.Conn) context.Context {
+		natstransport.SubscriberAfter[struct{}, struct{}](func(ctx context.Context, nc *nats.Conn) context.Context {
 			return context.WithValue(ctx, "one", 1)
 		}),
-		natstransport.SubscriberAfter(func(ctx context.Context, nc *nats.Conn) context.Context {
+		natstransport.SubscriberAfter[struct{}, struct{}](func(ctx context.Context, nc *nats.Conn) context.Context {
 			if _, ok := ctx.Value("one").(int); !ok {
 				t.Error("Value was not set properly when multiple ServerAfters are used")
 			}
@@ -294,11 +294,11 @@ func TestSubscriberFinalizerFunc(t *testing.T) {
 		done     = make(chan struct{})
 	)
 	handler := natstransport.NewSubscriber(
-		endpoint.Nop,
-		func(context.Context, *nats.Msg) (interface{}, error) {
+		endpoint.Nop[struct{}, struct{}],
+		func(context.Context, *nats.Msg) (struct{}, error) {
 			return struct{}{}, nil
 		},
-		func(_ context.Context, reply string, nc *nats.Conn, _ interface{}) error {
+		func(_ context.Context, reply string, nc *nats.Conn, _ struct{}) error {
 			b, err := json.Marshal(response)
 			if err != nil {
 				return err
@@ -306,7 +306,7 @@ func TestSubscriberFinalizerFunc(t *testing.T) {
 
 			return c.Publish(reply, b)
 		},
-		natstransport.SubscriberFinalizer(func(ctx context.Context, _ *nats.Msg) {
+		natstransport.SubscriberFinalizer[struct{}, struct{}](func(ctx context.Context, _ *nats.Msg) {
 			close(done)
 		}),
 	)
@@ -339,15 +339,15 @@ func TestEncodeJSONResponse(t *testing.T) {
 	s, c := newNATSConn(t)
 	defer func() { s.Shutdown(); s.WaitForShutdown() }()
 	defer c.Close()
-
+	type T struct {
+		Foo string `json:"foo"`
+	}
 	handler := natstransport.NewSubscriber(
-		func(context.Context, interface{}) (interface{}, error) {
-			return struct {
-				Foo string `json:"foo"`
-			}{"bar"}, nil
+		func(context.Context, struct{}) (T, error) {
+			return T{"bar"}, nil
 		},
-		func(context.Context, *nats.Msg) (interface{}, error) { return struct{}{}, nil },
-		natstransport.EncodeJSONResponse,
+		func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
+		natstransport.EncodeJSONResponse[T],
 	)
 
 	sub, err := c.QueueSubscribe("natstransport.test", "natstransport", handler.ServeMsg(c))
@@ -383,11 +383,11 @@ func TestErrorEncoder(t *testing.T) {
 		Error string `json:"err"`
 	}{"oh no"}
 	handler := natstransport.NewSubscriber(
-		func(context.Context, interface{}) (interface{}, error) {
-			return nil, responseError{msg: errResp.Error}
+		func(context.Context, struct{}) (struct{}, error) {
+			return struct{}{}, responseError{msg: errResp.Error}
 		},
-		func(context.Context, *nats.Msg) (interface{}, error) { return struct{}{}, nil },
-		natstransport.EncodeJSONResponse,
+		func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
+		natstransport.EncodeJSONResponse[struct{}],
 	)
 
 	sub, err := c.QueueSubscribe("natstransport.test", "natstransport", handler.ServeMsg(c))
@@ -417,10 +417,10 @@ func TestEncodeNoContent(t *testing.T) {
 	defer func() { s.Shutdown(); s.WaitForShutdown() }()
 	defer c.Close()
 
-	handler := natstransport.NewSubscriber(
-		func(context.Context, interface{}) (interface{}, error) { return noContentResponse{}, nil },
-		func(context.Context, *nats.Msg) (interface{}, error) { return struct{}{}, nil },
-		natstransport.EncodeJSONResponse,
+	handler := natstransport.NewSubscriber[struct{}, noContentResponse](
+		func(context.Context, struct{}) (noContentResponse, error) { return noContentResponse{}, nil },
+		func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
+		natstransport.EncodeJSONResponse[noContentResponse],
 	)
 
 	sub, err := c.QueueSubscribe("natstransport.test", "natstransport", handler.ServeMsg(c))
@@ -452,7 +452,7 @@ func TestNoOpRequestDecoder(t *testing.T) {
 			return nil, nil
 		},
 		natstransport.NopRequestDecoder,
-		natstransport.EncodeJSONResponse,
+		natstransport.EncodeJSONResponse[any],
 	)
 
 	sub, err := c.QueueSubscribe("natstransport.test", "natstransport", handler.ServeMsg(c))
@@ -474,17 +474,17 @@ func TestNoOpRequestDecoder(t *testing.T) {
 func testSubscriber(t *testing.T) (step func(), resp <-chan *nats.Msg) {
 	var (
 		stepch   = make(chan bool)
-		endpoint = func(context.Context, interface{}) (interface{}, error) {
+		endpoint = func(context.Context, struct{}) (struct{}, error) {
 			<-stepch
 			return struct{}{}, nil
 		}
 		response = make(chan *nats.Msg)
-		handler  = natstransport.NewSubscriber(
+		handler  = natstransport.NewSubscriber[struct{}, struct{}](
 			endpoint,
-			func(context.Context, *nats.Msg) (interface{}, error) { return struct{}{}, nil },
-			natstransport.EncodeJSONResponse,
-			natstransport.SubscriberBefore(func(ctx context.Context, msg *nats.Msg) context.Context { return ctx }),
-			natstransport.SubscriberAfter(func(ctx context.Context, nc *nats.Conn) context.Context { return ctx }),
+			func(context.Context, *nats.Msg) (struct{}, error) { return struct{}{}, nil },
+			natstransport.EncodeJSONResponse[struct{}],
+			natstransport.SubscriberBefore[struct{}, struct{}](func(ctx context.Context, msg *nats.Msg) context.Context { return ctx }),
+			natstransport.SubscriberAfter[struct{}, struct{}](func(ctx context.Context, nc *nats.Conn) context.Context { return ctx }),
 		)
 	)
 
@@ -510,7 +510,7 @@ func testSubscriber(t *testing.T) (step func(), resp <-chan *nats.Msg) {
 	return func() { stepch <- true }, response
 }
 
-func testRequest(t *testing.T, c *nats.Conn, handler *natstransport.Subscriber) TestResponse {
+func testRequest[REQ any, RES any](t *testing.T, c *nats.Conn, handler *natstransport.Subscriber[REQ, RES]) TestResponse {
 	sub, err := c.QueueSubscribe("natstransport.test", "natstransport", handler.ServeMsg(c))
 	if err != nil {
 		t.Fatal(err)

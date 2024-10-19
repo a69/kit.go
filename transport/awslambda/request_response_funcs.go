@@ -14,7 +14,7 @@ type HandlerRequestFunc func(ctx context.Context, payload []byte) context.Contex
 // and use it to manipulate the response before it's marshaled.
 // HandlerResponseFunc are executed after invoking the endpoint
 // but prior to returning a response.
-type HandlerResponseFunc func(ctx context.Context, response interface{}) context.Context
+type HandlerResponseFunc[RES any] func(ctx context.Context, response RES) context.Context
 
 // HandlerFinalizerFunc is executed at the end of Invoke.
 // This can be used for logging purposes.

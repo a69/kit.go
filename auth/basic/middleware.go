@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-kit/kit/endpoint"
-	httptransport "github.com/go-kit/kit/transport/http"
+	"github.com/a69/kit.go/endpoint"
+	httptransport "github.com/a69/kit.go/transport/http"
 )
 
 // AuthError represents an authorization error.
@@ -64,20 +64,22 @@ func toHashSlice(s []byte) []byte {
 }
 
 // AuthMiddleware returns a Basic Authentication middleware for a particular user and password.
-func AuthMiddleware(requiredUser, requiredPassword, realm string) endpoint.Middleware {
+func AuthMiddleware[REQ any, RES any](requiredUser, requiredPassword, realm string) endpoint.Middleware[REQ, RES] {
 	requiredUserBytes := toHashSlice([]byte(requiredUser))
 	requiredPasswordBytes := toHashSlice([]byte(requiredPassword))
 
-	return func(next endpoint.Endpoint) endpoint.Endpoint {
-		return func(ctx context.Context, request interface{}) (interface{}, error) {
+	return func(next endpoint.Endpoint[REQ, RES]) endpoint.Endpoint[REQ, RES] {
+		return func(ctx context.Context, request REQ) (res RES, err error) {
 			auth, ok := ctx.Value(httptransport.ContextKeyRequestAuthorization).(string)
 			if !ok {
-				return nil, AuthError{realm}
+				err = AuthError{realm}
+				return
 			}
 
 			givenUser, givenPassword, ok := parseBasicAuth(auth)
 			if !ok {
-				return nil, AuthError{realm}
+				err = AuthError{realm}
+				return
 			}
 
 			givenUserBytes := toHashSlice(givenUser)
@@ -85,7 +87,8 @@ func AuthMiddleware(requiredUser, requiredPassword, realm string) endpoint.Middl
 
 			if subtle.ConstantTimeCompare(givenUserBytes, requiredUserBytes) == 0 ||
 				subtle.ConstantTimeCompare(givenPasswordBytes, requiredPasswordBytes) == 0 {
-				return nil, AuthError{realm}
+				err = AuthError{realm}
+				return
 			}
 
 			return next(ctx, request)

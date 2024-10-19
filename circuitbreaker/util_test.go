@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
+	"github.com/a69/kit.go/endpoint"
 )
 
 func testFailingEndpoint(
 	t *testing.T,
-	breaker endpoint.Middleware,
+	breaker endpoint.Middleware[int, bool],
 	primeWith int,
 	shouldPass func(int) bool,
 	requestDelay time.Duration,
@@ -25,13 +25,13 @@ func testFailingEndpoint(
 
 	// Create a mock endpoint and wrap it with the breaker.
 	m := mock{}
-	var e endpoint.Endpoint
+	var e endpoint.Endpoint[int, bool]
 	e = m.endpoint
 	e = breaker(e)
 
 	// Prime the endpoint with successful requests.
 	for i := 0; i < primeWith; i++ {
-		if _, err := e(context.Background(), struct{}{}); err != nil {
+		if _, err := e(context.Background(), 0); err != nil {
 			t.Fatalf("%s: during priming, got error: %v", caller, err)
 		}
 		time.Sleep(requestDelay)
@@ -43,7 +43,7 @@ func testFailingEndpoint(
 
 	// The first several should be allowed through and yield our error.
 	for i := 0; shouldPass(i); i++ {
-		if _, err := e(context.Background(), struct{}{}); err != m.err {
+		if _, err := e(context.Background(), 0); err != m.err {
 			t.Fatalf("%s: want %v, have %v", caller, m.err, err)
 		}
 		time.Sleep(requestDelay)
@@ -52,7 +52,7 @@ func testFailingEndpoint(
 
 	// But the rest should be blocked by an open circuit.
 	for i := 0; i < 10; i++ {
-		if _, err := e(context.Background(), struct{}{}); err.Error() != openCircuitError {
+		if _, err := e(context.Background(), 0); err.Error() != openCircuitError {
 			t.Fatalf("%s: want %q, have %q", caller, openCircuitError, err.Error())
 		}
 		time.Sleep(requestDelay)
@@ -69,7 +69,7 @@ type mock struct {
 	err     error
 }
 
-func (m *mock) endpoint(context.Context, interface{}) (interface{}, error) {
+func (m *mock) endpoint(context.Context, int) (bool, error) {
 	m.through++
-	return struct{}{}, m.err
+	return false, m.err
 }

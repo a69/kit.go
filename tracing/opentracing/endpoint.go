@@ -8,8 +8,8 @@ import (
 	otext "github.com/opentracing/opentracing-go/ext"
 	otlog "github.com/opentracing/opentracing-go/log"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd/lb"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd/lb"
 )
 
 // TraceEndpoint returns a Middleware that wraps the `next` Endpoint in an
@@ -17,7 +17,7 @@ import (
 //
 // If `ctx` already has a Span, child span is created from it.
 // If `ctx` doesn't yet have a Span, the new one is created.
-func TraceEndpoint(tracer opentracing.Tracer, operationName string, opts ...EndpointOption) endpoint.Middleware {
+func TraceEndpoint[REQ any, RES any](tracer opentracing.Tracer, operationName string, opts ...EndpointOption) endpoint.Middleware[REQ, RES] {
 	cfg := &EndpointOptions{
 		Tags: make(opentracing.Tags),
 	}
@@ -26,8 +26,8 @@ func TraceEndpoint(tracer opentracing.Tracer, operationName string, opts ...Endp
 		opt(cfg)
 	}
 
-	return func(next endpoint.Endpoint) endpoint.Endpoint {
-		return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+	return func(next endpoint.Endpoint[REQ, RES]) endpoint.Endpoint[REQ, RES] {
+		return func(ctx context.Context, request REQ) (response RES, err error) {
 			if cfg.GetOperationName != nil {
 				if newOperationName := cfg.GetOperationName(ctx, operationName); newOperationName != "" {
 					operationName = newOperationName
@@ -74,22 +74,6 @@ func TraceEndpoint(tracer opentracing.Tracer, operationName string, opts ...Endp
 
 					return
 				}
-
-				// test for business error
-				if res, ok := response.(endpoint.Failer); ok && res.Failed() != nil {
-					span.LogFields(
-						otlog.String("gokit.business.error", res.Failed().Error()),
-					)
-
-					if cfg.IgnoreBusinessError {
-						return
-					}
-
-					// treating business error as real error in span.
-					otext.LogError(span, res.Failed())
-
-					return
-				}
 			}()
 
 			return next(ctx, request)
@@ -99,22 +83,22 @@ func TraceEndpoint(tracer opentracing.Tracer, operationName string, opts ...Endp
 
 // TraceServer returns a Middleware that wraps the `next` Endpoint in an
 // OpenTracing Span called `operationName` with server span.kind tag..
-func TraceServer(tracer opentracing.Tracer, operationName string, opts ...EndpointOption) endpoint.Middleware {
+func TraceServer[REQ any, RES any](tracer opentracing.Tracer, operationName string, opts ...EndpointOption) endpoint.Middleware[REQ, RES] {
 	opts = append(opts, WithTags(map[string]interface{}{
 		otext.SpanKindRPCServer.Key: otext.SpanKindRPCServer.Value,
 	}))
 
-	return TraceEndpoint(tracer, operationName, opts...)
+	return TraceEndpoint[REQ, RES](tracer, operationName, opts...)
 }
 
 // TraceClient returns a Middleware that wraps the `next` Endpoint in an
 // OpenTracing Span called `operationName` with client span.kind tag.
-func TraceClient(tracer opentracing.Tracer, operationName string, opts ...EndpointOption) endpoint.Middleware {
+func TraceClient[REQ any, RES any](tracer opentracing.Tracer, operationName string, opts ...EndpointOption) endpoint.Middleware[REQ, RES] {
 	opts = append(opts, WithTags(map[string]interface{}{
 		otext.SpanKindRPCClient.Key: otext.SpanKindRPCClient.Value,
 	}))
 
-	return TraceEndpoint(tracer, operationName, opts...)
+	return TraceEndpoint[REQ, RES](tracer, operationName, opts...)
 }
 
 func applyTags(span opentracing.Span, tags opentracing.Tags) {

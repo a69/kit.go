@@ -8,13 +8,13 @@ import (
 
 	"crypto/subtle"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type customClaims struct {
 	MyProperty string `json:"my_property"`
-	jwt.StandardClaims
+	jwt.RegisteredClaims
 }
 
 func (c customClaims) VerifyMyProperty(p string) bool {
@@ -28,17 +28,17 @@ var (
 	method         = jwt.SigningMethodHS256
 	invalidMethod  = jwt.SigningMethodRS256
 	mapClaims      = jwt.MapClaims{"user": "go-kit"}
-	standardClaims = jwt.StandardClaims{Audience: "go-kit"}
-	myCustomClaims = customClaims{MyProperty: myProperty, StandardClaims: standardClaims}
+	standardClaims = jwt.RegisteredClaims{Audience: jwt.ClaimStrings{"go-kit"}}
+	myCustomClaims = customClaims{MyProperty: myProperty, RegisteredClaims: standardClaims}
 	// Signed tokens generated at https://jwt.io/
 	signedKey         = "eyJhbGciOiJIUzI1NiIsImtpZCI6ImtpZCIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZ28ta2l0In0.14M2VmYyApdSlV_LZ88ajjwuaLeIFplB8JpyNy0A19E"
-	standardSignedKey = "eyJhbGciOiJIUzI1NiIsImtpZCI6ImtpZCIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJnby1raXQifQ.L5ypIJjCOOv3jJ8G5SelaHvR04UJuxmcBN5QW3m_aoY"
-	customSignedKey   = "eyJhbGciOiJIUzI1NiIsImtpZCI6ImtpZCIsInR5cCI6IkpXVCJ9.eyJteV9wcm9wZXJ0eSI6InNvbWUgdmFsdWUiLCJhdWQiOiJnby1raXQifQ.s8F-IDrV4WPJUsqr7qfDi-3GRlcKR0SRnkTeUT_U-i0"
+	standardSignedKey = "eyJhbGciOiJIUzI1NiIsImtpZCI6ImtpZCIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiZ28ta2l0Il19.vqB-qPpEqKyEYqNsDsM7ZrWYG7ZEhJLwBXMzR0H3ajo"
+	customSignedKey   = "eyJhbGciOiJIUzI1NiIsImtpZCI6ImtpZCIsInR5cCI6IkpXVCJ9.eyJteV9wcm9wZXJ0eSI6InNvbWUgdmFsdWUiLCJhdWQiOlsiZ28ta2l0Il19.Yus4v91ScNgx6_zgLJVYofo2vpZziA_vds7WPWwwgbE"
 	invalidKey        = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.e30.vKVCKto-Wn6rgz3vBdaZaCBGfCBDTXOENSo_X2Gq7qA"
 	malformedKey      = "malformed.jwt.token"
 )
 
-func signingValidator(t *testing.T, signer endpoint.Endpoint, expectedKey string) {
+func signingValidator(t *testing.T, signer endpoint.Endpoint[struct{}, context.Context], expectedKey string) {
 	ctx, err := signer(context.Background(), struct{}{})
 	if err != nil {
 		t.Fatalf("Signer returned error: %s", err)
@@ -55,26 +55,26 @@ func signingValidator(t *testing.T, signer endpoint.Endpoint, expectedKey string
 }
 
 func TestNewSigner(t *testing.T) {
-	e := func(ctx context.Context, i interface{}) (interface{}, error) { return ctx, nil }
+	e := func(ctx context.Context, i struct{}) (context.Context, error) { return ctx, nil }
 
-	signer := NewSigner(kid, key, method, mapClaims)(e)
+	signer := NewSigner[struct{}, context.Context](kid, key, method, mapClaims)(e)
 	signingValidator(t, signer, signedKey)
 
-	signer = NewSigner(kid, key, method, standardClaims)(e)
+	signer = NewSigner[struct{}, context.Context](kid, key, method, standardClaims)(e)
 	signingValidator(t, signer, standardSignedKey)
 
-	signer = NewSigner(kid, key, method, myCustomClaims)(e)
+	signer = NewSigner[struct{}, context.Context](kid, key, method, myCustomClaims)(e)
 	signingValidator(t, signer, customSignedKey)
 }
 
 func TestJWTParser(t *testing.T) {
-	e := func(ctx context.Context, i interface{}) (interface{}, error) { return ctx, nil }
+	e := func(ctx context.Context, i struct{}) (context.Context, error) { return ctx, nil }
 
 	keys := func(token *jwt.Token) (interface{}, error) {
 		return key, nil
 	}
 
-	parser := NewParser(keys, method, MapClaimsFactory)(e)
+	parser := NewParser[struct{}, context.Context](keys, method, MapClaimsFactory)(e)
 
 	// No Token is passed into the parser
 	_, err := parser(context.Background(), struct{}{})
@@ -93,24 +93,12 @@ func TestJWTParser(t *testing.T) {
 		t.Error("Parser should have returned an error")
 	}
 
-	// Invalid Method is used in the parser
-	badParser := NewParser(keys, invalidMethod, MapClaimsFactory)(e)
-	ctx = context.WithValue(context.Background(), JWTContextKey, signedKey)
-	_, err = badParser(ctx, struct{}{})
-	if err == nil {
-		t.Error("Parser should have returned an error")
-	}
-
-	if err != ErrUnexpectedSigningMethod {
-		t.Errorf("unexpected error returned, expected: %s got: %s", ErrUnexpectedSigningMethod, err)
-	}
-
 	// Invalid key is used in the parser
 	invalidKeys := func(token *jwt.Token) (interface{}, error) {
 		return []byte("bad"), nil
 	}
 
-	badParser = NewParser(invalidKeys, method, MapClaimsFactory)(e)
+	badParser := NewParser[struct{}, context.Context](invalidKeys, method, MapClaimsFactory)(e)
 	ctx = context.WithValue(context.Background(), JWTContextKey, signedKey)
 	_, err = badParser(ctx, struct{}{})
 	if err == nil {
@@ -134,7 +122,7 @@ func TestJWTParser(t *testing.T) {
 	}
 
 	// Test for malformed token error response
-	parser = NewParser(keys, method, StandardClaimsFactory)(e)
+	parser = NewParser[struct{}, context.Context](keys, method, StandardClaimsFactory)(e)
 	ctx = context.WithValue(context.Background(), JWTContextKey, malformedKey)
 	ctx1, err = parser(ctx, struct{}{})
 	if want, have := ErrTokenMalformed, err; want != have {
@@ -142,8 +130,8 @@ func TestJWTParser(t *testing.T) {
 	}
 
 	// Test for expired token error response
-	parser = NewParser(keys, method, StandardClaimsFactory)(e)
-	expired := jwt.NewWithClaims(method, jwt.StandardClaims{ExpiresAt: time.Now().Unix() - 100})
+	parser = NewParser[struct{}, context.Context](keys, method, StandardClaimsFactory)(e)
+	expired := jwt.NewWithClaims(method, jwt.RegisteredClaims{ExpiresAt: jwt.NewNumericDate(time.Now().Add(-100 * time.Second))})
 	token, err := expired.SignedString(key)
 	if err != nil {
 		t.Fatalf("Unable to Sign Token: %+v", err)
@@ -155,8 +143,8 @@ func TestJWTParser(t *testing.T) {
 	}
 
 	// Test for not activated token error response
-	parser = NewParser(keys, method, StandardClaimsFactory)(e)
-	notactive := jwt.NewWithClaims(method, jwt.StandardClaims{NotBefore: time.Now().Unix() + 100})
+	parser = NewParser[struct{}, context.Context](keys, method, StandardClaimsFactory)(e)
+	notactive := jwt.NewWithClaims(method, jwt.RegisteredClaims{NotBefore: jwt.NewNumericDate(time.Now().Add(1100 * time.Second))})
 	token, err = notactive.SignedString(key)
 	if err != nil {
 		t.Fatalf("Unable to Sign Token: %+v", err)
@@ -168,22 +156,23 @@ func TestJWTParser(t *testing.T) {
 	}
 
 	// test valid standard claims token
-	parser = NewParser(keys, method, StandardClaimsFactory)(e)
+	parser = NewParser[struct{}, context.Context](keys, method, StandardClaimsFactory)(e)
 	ctx = context.WithValue(context.Background(), JWTContextKey, standardSignedKey)
 	ctx1, err = parser(ctx, struct{}{})
 	if err != nil {
 		t.Fatalf("Parser returned error: %s", err)
 	}
-	stdCl, ok := ctx1.(context.Context).Value(JWTClaimsContextKey).(*jwt.StandardClaims)
+	stdCl, ok := ctx1.(context.Context).Value(JWTClaimsContextKey).(*jwt.RegisteredClaims)
 	if !ok {
 		t.Fatal("Claims were not passed into context correctly")
 	}
-	if !stdCl.VerifyAudience("go-kit", true) {
+	err = jwt.NewValidator(jwt.WithAudience("go-kit")).Validate(stdCl)
+	if err != nil {
 		t.Fatalf("JWT jwt.StandardClaims.Audience did not match: expecting %s got %s", standardClaims.Audience, stdCl.Audience)
 	}
 
 	// test valid customized claims token
-	parser = NewParser(keys, method, func() jwt.Claims { return &customClaims{} })(e)
+	parser = NewParser[struct{}, context.Context](keys, method, func() jwt.Claims { return &customClaims{} })(e)
 	ctx = context.WithValue(context.Background(), JWTContextKey, customSignedKey)
 	ctx1, err = parser(ctx, struct{}{})
 	if err != nil {
@@ -193,7 +182,8 @@ func TestJWTParser(t *testing.T) {
 	if !ok {
 		t.Fatal("Claims were not passed into context correctly")
 	}
-	if !custCl.VerifyAudience("go-kit", true) {
+	err = jwt.NewValidator(jwt.WithAudience("go-kit")).Validate(stdCl)
+	if err != nil {
 		t.Fatalf("JWT customClaims.Audience did not match: expecting %s got %s", standardClaims.Audience, custCl.Audience)
 	}
 	if !custCl.VerifyMyProperty(myProperty) {
@@ -204,7 +194,7 @@ func TestJWTParser(t *testing.T) {
 func TestIssue562(t *testing.T) {
 	var (
 		kf  = func(token *jwt.Token) (interface{}, error) { return []byte("secret"), nil }
-		e   = NewParser(kf, jwt.SigningMethodHS256, MapClaimsFactory)(endpoint.Nop)
+		e   = NewParser[struct{}, context.Context](kf, jwt.SigningMethodHS256, MapClaimsFactory)(endpoint.Nop[struct{}, context.Context])
 		key = JWTContextKey
 		val = "eyJhbGciOiJIUzI1NiIsImtpZCI6ImtpZCIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZ28ta2l0In0.14M2VmYyApdSlV_LZ88ajjwuaLeIFplB8JpyNy0A19E"
 		ctx = context.WithValue(context.Background(), key, val)

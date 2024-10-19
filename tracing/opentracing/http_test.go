@@ -10,7 +10,7 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/mocktracer"
 
-	kitot "github.com/go-kit/kit/tracing/opentracing"
+	kitot "github.com/a69/kit.go/tracing/opentracing"
 	"github.com/go-kit/log"
 )
 

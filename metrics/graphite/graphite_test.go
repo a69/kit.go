@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/go-kit/kit/metrics/teststat"
+	"github.com/a69/kit.go/metrics/teststat"
 	"github.com/go-kit/log"
 )
 

@@ -5,14 +5,14 @@ import (
 	"math"
 	"testing"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd"
 )
 
 func TestRandom(t *testing.T) {
 	var (
 		n          = 7
-		endpoints  = make([]endpoint.Endpoint, n)
+		endpoints  = make([]endpoint.Endpoint[any, any], n)
 		counts     = make([]int, n)
 		seed       = int64(12345)
 		iterations = 1000000
@@ -25,8 +25,8 @@ func TestRandom(t *testing.T) {
 		endpoints[i] = func(context.Context, interface{}) (interface{}, error) { counts[i0]++; return struct{}{}, nil }
 	}
 
-	endpointer := sd.FixedEndpointer(endpoints)
-	balancer := NewRandom(endpointer, seed)
+	endpointer := sd.FixedEndpointer[any, any](endpoints)
+	balancer := NewRandom[any, any](endpointer, seed)
 
 	for i := 0; i < iterations; i++ {
 		endpoint, _ := balancer.Endpoint()
@@ -42,8 +42,8 @@ func TestRandom(t *testing.T) {
 }
 
 func TestRandomNoEndpoints(t *testing.T) {
-	endpointer := sd.FixedEndpointer{}
-	balancer := NewRandom(endpointer, 1415926)
+	endpointer := sd.FixedEndpointer[any, any]{}
+	balancer := NewRandom[any, any](endpointer, 1415926)
 	_, err := balancer.Endpoint()
 	if want, have := ErrNoEndpoints, err; want != have {
 		t.Errorf("want %v, have %v", want, have)

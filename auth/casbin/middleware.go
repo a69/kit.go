@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/a69/kit.go/endpoint"
 	stdcasbin "github.com/casbin/casbin/v2"
-	"github.com/go-kit/kit/endpoint"
 )
 
 type contextKey string
@@ -44,25 +44,26 @@ var (
 // action on the given object. If a valid access control model and policy
 // is given, then the generated casbin Enforcer is stored in the context
 // with CasbinEnforcer as the key.
-func NewEnforcer(
+func NewEnforcer[REQ any, RES any](
 	subject string, object interface{}, action string,
-) endpoint.Middleware {
-	return func(next endpoint.Endpoint) endpoint.Endpoint {
-		return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+) endpoint.Middleware[REQ, RES] {
+	return func(next endpoint.Endpoint[REQ, RES]) endpoint.Endpoint[REQ, RES] {
+		return func(ctx context.Context, request REQ) (response RES, err error) {
 			casbinModel := ctx.Value(CasbinModelContextKey)
 			casbinPolicy := ctx.Value(CasbinPolicyContextKey)
 			enforcer, err := stdcasbin.NewEnforcer(casbinModel, casbinPolicy)
 			if err != nil {
-				return nil, err
+				return
 			}
 
 			ctx = context.WithValue(ctx, CasbinEnforcerContextKey, enforcer)
 			ok, err := enforcer.Enforce(subject, object, action)
 			if err != nil {
-				return nil, err
+				return
 			}
 			if !ok {
-				return nil, ErrUnauthorized
+				err = ErrUnauthorized
+				return
 			}
 
 			return next(ctx, request)

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd"
-	"github.com/go-kit/kit/sd/internal/instance"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd"
+	"github.com/a69/kit.go/sd/internal/instance"
 	"github.com/go-kit/log"
 )
 
@@ -16,8 +16,8 @@ func TestDefaultEndpointer(t *testing.T) {
 		ca = make(closer)
 		cb = make(closer)
 		c  = map[string]io.Closer{"a": ca, "b": cb}
-		f  = func(instance string) (endpoint.Endpoint, io.Closer, error) {
-			return endpoint.Nop, c[instance], nil
+		f  = func(instance string) (endpoint.Endpoint[any, any], io.Closer, error) {
+			return endpoint.Nop[any, any], c[instance], nil
 		}
 		instancer = &mockInstancer{instance.NewCache()}
 	)
@@ -27,7 +27,7 @@ func TestDefaultEndpointer(t *testing.T) {
 	endpointer := sd.NewEndpointer(instancer, f, log.NewNopLogger(), sd.InvalidateOnError(time.Minute))
 
 	var (
-		endpoints []endpoint.Endpoint
+		endpoints []endpoint.Endpoint[any, any]
 		err       error
 	)
 	if !within(time.Second, func() bool {

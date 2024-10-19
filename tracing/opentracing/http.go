@@ -9,7 +9,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 
-	kithttp "github.com/go-kit/kit/transport/http"
+	kithttp "github.com/a69/kit.go/transport/http"
 	"github.com/go-kit/log"
 )
 

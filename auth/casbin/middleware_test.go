@@ -10,7 +10,7 @@ import (
 )
 
 func TestStructBaseContext(t *testing.T) {
-	e := func(ctx context.Context, i interface{}) (interface{}, error) { return ctx, nil }
+	e := func(ctx context.Context, i struct{}) (context.Context, error) { return ctx, nil }
 
 	m := model.NewModel()
 	m.AddDef("r", "r", "sub, obj, act")
@@ -24,18 +24,18 @@ func TestStructBaseContext(t *testing.T) {
 	ctx = context.WithValue(ctx, CasbinPolicyContextKey, a)
 
 	// positive case
-	middleware := NewEnforcer("alice", "/alice_data/resource1", "GET")(e)
+	middleware := NewEnforcer[struct{}, context.Context]("alice", "/alice_data/resource1", "GET")(e)
 	ctx1, err := middleware(ctx, struct{}{})
 	if err != nil {
 		t.Fatalf("Enforcer returned error: %s", err)
 	}
-	_, ok := ctx1.(context.Context).Value(CasbinEnforcerContextKey).(*stdcasbin.Enforcer)
+	_, ok := ctx1.Value(CasbinEnforcerContextKey).(*stdcasbin.Enforcer)
 	if !ok {
 		t.Fatalf("context should contains the active enforcer")
 	}
 
 	// negative case
-	middleware = NewEnforcer("alice", "/alice_data/resource2", "POST")(e)
+	middleware = NewEnforcer[struct{}, context.Context]("alice", "/alice_data/resource2", "POST")(e)
 	_, err = middleware(ctx, struct{}{})
 	if err == nil {
 		t.Fatalf("Enforcer should return error")
@@ -43,12 +43,12 @@ func TestStructBaseContext(t *testing.T) {
 }
 
 func TestFileBaseContext(t *testing.T) {
-	e := func(ctx context.Context, i interface{}) (interface{}, error) { return ctx, nil }
+	e := func(ctx context.Context, i struct{}) (context.Context, error) { return ctx, nil }
 	ctx := context.WithValue(context.Background(), CasbinModelContextKey, "testdata/basic_model.conf")
 	ctx = context.WithValue(ctx, CasbinPolicyContextKey, "testdata/basic_policy.csv")
 
 	// positive case
-	middleware := NewEnforcer("alice", "data1", "read")(e)
+	middleware := NewEnforcer[struct{}, context.Context]("alice", "data1", "read")(e)
 	_, err := middleware(ctx, struct{}{})
 	if err != nil {
 		t.Fatalf("Enforcer returned error: %s", err)

@@ -12,9 +12,9 @@ import (
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/cloudwatch/cloudwatchiface"
 
-	"github.com/go-kit/kit/metrics"
-	"github.com/go-kit/kit/metrics/generic"
-	"github.com/go-kit/kit/metrics/internal/lv"
+	"github.com/a69/kit.go/metrics"
+	"github.com/a69/kit.go/metrics/generic"
+	"github.com/a69/kit.go/metrics/internal/lv"
 	"github.com/go-kit/log"
 )
 

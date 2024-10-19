@@ -6,8 +6,8 @@ import (
 
 	"go.opencensus.io/trace"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd/lb"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd/lb"
 )
 
 // TraceEndpointDefaultName is the default endpoint span name to use.
@@ -18,7 +18,7 @@ const TraceEndpointDefaultName = "gokit/endpoint"
 // tracing middleware, generic OpenCensus transport middleware or custom before
 // and after transport functions as service propagation of SpanContext is not
 // provided in this middleware.
-func TraceEndpoint(name string, options ...EndpointOption) endpoint.Middleware {
+func TraceEndpoint[REQ any, RES any](name string, options ...EndpointOption) endpoint.Middleware[REQ, RES] {
 	if name == "" {
 		name = TraceEndpointDefaultName
 	}
@@ -29,8 +29,8 @@ func TraceEndpoint(name string, options ...EndpointOption) endpoint.Middleware {
 		o(cfg)
 	}
 
-	return func(next endpoint.Endpoint) endpoint.Endpoint {
-		return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+	return func(next endpoint.Endpoint[REQ, RES]) endpoint.Endpoint[REQ, RES] {
+		return func(ctx context.Context, request REQ) (response RES, err error) {
 			if cfg.GetName != nil {
 				if newName := cfg.GetName(ctx, name); newName != "" {
 					name = newName
@@ -70,23 +70,6 @@ func TraceEndpoint(name string, options ...EndpointOption) endpoint.Middleware {
 					span.SetStatus(trace.Status{
 						Code:    trace.StatusCodeUnknown,
 						Message: err.Error(),
-					})
-					return
-				}
-
-				// test for business error
-				if res, ok := response.(endpoint.Failer); ok && res.Failed() != nil {
-					span.AddAttributes(
-						trace.StringAttribute("gokit.business.error", res.Failed().Error()),
-					)
-					if cfg.IgnoreBusinessError {
-						span.SetStatus(trace.Status{Code: trace.StatusCodeOK})
-						return
-					}
-					// treating business error as real error in span.
-					span.SetStatus(trace.Status{
-						Code:    trace.StatusCodeUnknown,
-						Message: res.Failed().Error(),
 					})
 					return
 				}

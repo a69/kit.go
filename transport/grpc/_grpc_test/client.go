@@ -5,13 +5,13 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/go-kit/kit/endpoint"
-	grpctransport "github.com/go-kit/kit/transport/grpc"
-	"github.com/go-kit/kit/transport/grpc/_grpc_test/pb"
+	"github.com/a69/kit.go/endpoint"
+	grpctransport "github.com/a69/kit.go/transport/grpc"
+	"github.com/a69/kit.go/transport/grpc/_grpc_test/pb"
 )
 
 type clientBinding struct {
-	test endpoint.Endpoint
+	test endpoint.Endpoint[TestRequest, TestResponse]
 }
 
 func (c *clientBinding) Test(ctx context.Context, a string, b int64) (context.Context, string, error) {
@@ -19,7 +19,7 @@ func (c *clientBinding) Test(ctx context.Context, a string, b int64) (context.Co
 	if err != nil {
 		return nil, "", err
 	}
-	r := response.(*TestResponse)
+	r := response
 	return r.Ctx, r.V, nil
 }
 
@@ -32,17 +32,17 @@ func NewClient(cc *grpc.ClientConn) Service {
 			encodeRequest,
 			decodeResponse,
 			&pb.TestResponse{},
-			grpctransport.ClientBefore(
+			grpctransport.ClientBefore[TestRequest, TestResponse](
 				injectCorrelationID,
 			),
-			grpctransport.ClientBefore(
+			grpctransport.ClientBefore[TestRequest, TestResponse](
 				displayClientRequestHeaders,
 			),
-			grpctransport.ClientAfter(
+			grpctransport.ClientAfter[TestRequest, TestResponse](
 				displayClientResponseHeaders,
 				displayClientResponseTrailers,
 			),
-			grpctransport.ClientAfter(
+			grpctransport.ClientAfter[TestRequest, TestResponse](
 				extractConsumedCorrelationID,
 			),
 		).Endpoint(),

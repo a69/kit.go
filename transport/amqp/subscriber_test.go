@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	amqptransport "github.com/go-kit/kit/transport/amqp"
+	amqptransport "github.com/a69/kit.go/transport/amqp"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -42,13 +42,13 @@ func (ch *mockChannel) Consume(queue, consumer string, autoAck, exclusive, noLoc
 
 // TestSubscriberBadDecode checks if decoder errors are handled properly.
 func TestSubscriberBadDecode(t *testing.T) {
-	sub := amqptransport.NewSubscriber(
-		func(context.Context, interface{}) (interface{}, error) { return struct{}{}, nil },
-		func(context.Context, *amqp.Delivery) (interface{}, error) { return nil, errors.New("err!") },
-		func(context.Context, *amqp.Publishing, interface{}) error {
+	sub := amqptransport.NewSubscriber[struct{}, struct{}](
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+		func(context.Context, *amqp.Delivery) (struct{}, error) { return struct{}{}, errors.New("err!") },
+		func(context.Context, *amqp.Publishing, struct{}) error {
 			return nil
 		},
-		amqptransport.SubscriberErrorEncoder(amqptransport.ReplyErrorEncoder),
+		amqptransport.SubscriberErrorEncoder[struct{}, struct{}](amqptransport.ReplyErrorEncoder),
 	)
 
 	outputChan := make(chan amqp.Publishing, 1)
@@ -74,13 +74,13 @@ func TestSubscriberBadDecode(t *testing.T) {
 
 // TestSubscriberBadEndpoint checks if endpoint errors are handled properly.
 func TestSubscriberBadEndpoint(t *testing.T) {
-	sub := amqptransport.NewSubscriber(
-		func(context.Context, interface{}) (interface{}, error) { return nil, errors.New("err!") },
-		func(context.Context, *amqp.Delivery) (interface{}, error) { return struct{}{}, nil },
-		func(context.Context, *amqp.Publishing, interface{}) error {
+	sub := amqptransport.NewSubscriber[struct{}, struct{}](
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, errors.New("err!") },
+		func(context.Context, *amqp.Delivery) (struct{}, error) { return struct{}{}, nil },
+		func(context.Context, *amqp.Publishing, struct{}) error {
 			return nil
 		},
-		amqptransport.SubscriberErrorEncoder(amqptransport.ReplyErrorEncoder),
+		amqptransport.SubscriberErrorEncoder[struct{}, struct{}](amqptransport.ReplyErrorEncoder),
 	)
 
 	outputChan := make(chan amqp.Publishing, 1)
@@ -109,12 +109,12 @@ func TestSubscriberBadEndpoint(t *testing.T) {
 // TestSubscriberBadEncoder checks if encoder errors are handled properly.
 func TestSubscriberBadEncoder(t *testing.T) {
 	sub := amqptransport.NewSubscriber(
-		func(context.Context, interface{}) (interface{}, error) { return struct{}{}, nil },
-		func(context.Context, *amqp.Delivery) (interface{}, error) { return struct{}{}, nil },
-		func(context.Context, *amqp.Publishing, interface{}) error {
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+		func(context.Context, *amqp.Delivery) (struct{}, error) { return struct{}{}, nil },
+		func(context.Context, *amqp.Publishing, struct{}) error {
 			return errors.New("err!")
 		},
-		amqptransport.SubscriberErrorEncoder(amqptransport.ReplyErrorEncoder),
+		amqptransport.SubscriberErrorEncoder[struct{}, struct{}](amqptransport.ReplyErrorEncoder),
 	)
 
 	outputChan := make(chan amqp.Publishing, 1)
@@ -153,11 +153,11 @@ func TestSubscriberSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sub := amqptransport.NewSubscriber(
+	sub := amqptransport.NewSubscriber[testReq, testRes](
 		testEndpoint,
 		testReqDecoder,
-		amqptransport.EncodeJSONResponse,
-		amqptransport.SubscriberErrorEncoder(amqptransport.ReplyErrorEncoder),
+		amqptransport.GenericEncodeJSONResponse[testRes],
+		amqptransport.SubscriberErrorEncoder[testReq, testRes](amqptransport.ReplyErrorEncoder),
 	)
 
 	checkReplyToFunc := func(exchange, key string, mandatory, immediate bool) {
@@ -203,15 +203,11 @@ func TestSubscriberSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, ok := response.(testRes)
-	if !ok {
-		t.Error(errTypeAssertion)
-	}
 
-	if want, have := obj.Squadron, res.Squadron; want != have {
+	if want, have := obj.Squadron, response.Squadron; want != have {
 		t.Errorf("want %d, have %d", want, have)
 	}
-	if want, have := names[obj.Squadron], res.Name; want != have {
+	if want, have := names[obj.Squadron], response.Name; want != have {
 		t.Errorf("want %s, have %s", want, have)
 	}
 }
@@ -232,9 +228,9 @@ func TestNopResponseSubscriber(t *testing.T) {
 	sub := amqptransport.NewSubscriber(
 		testEndpoint,
 		testReqDecoder,
-		amqptransport.EncodeJSONResponse,
-		amqptransport.SubscriberResponsePublisher(amqptransport.NopResponsePublisher),
-		amqptransport.SubscriberErrorEncoder(amqptransport.ReplyErrorEncoder),
+		amqptransport.GenericEncodeJSONResponse[testRes],
+		amqptransport.SubscriberResponsePublisher[testReq, testRes](amqptransport.NopResponsePublisher),
+		amqptransport.SubscriberErrorEncoder[testReq, testRes](amqptransport.ReplyErrorEncoder),
 	)
 
 	checkReplyToFunc := func(exchange, key string, mandatory, immediate bool) {}
@@ -264,11 +260,11 @@ func TestSubscriberMultipleBefore(t *testing.T) {
 	contentType := "some content type"
 	contentEncoding := "some content encoding"
 	sub := amqptransport.NewSubscriber(
-		func(context.Context, interface{}) (interface{}, error) { return struct{}{}, nil },
-		func(context.Context, *amqp.Delivery) (interface{}, error) { return struct{}{}, nil },
-		amqptransport.EncodeJSONResponse,
-		amqptransport.SubscriberErrorEncoder(amqptransport.ReplyErrorEncoder),
-		amqptransport.SubscriberBefore(
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+		func(context.Context, *amqp.Delivery) (struct{}, error) { return struct{}{}, nil },
+		amqptransport.GenericEncodeJSONResponse[struct{}],
+		amqptransport.SubscriberErrorEncoder[struct{}, struct{}](amqptransport.ReplyErrorEncoder),
+		amqptransport.SubscriberBefore[struct{}, struct{}](
 			amqptransport.SetPublishExchange(exchange),
 			amqptransport.SetPublishKey(key),
 			amqptransport.SetPublishDeliveryMode(deliveryMode),
@@ -328,10 +324,10 @@ func TestDefaultContentMetaData(t *testing.T) {
 	defaultContentType := ""
 	defaultContentEncoding := ""
 	sub := amqptransport.NewSubscriber(
-		func(context.Context, interface{}) (interface{}, error) { return struct{}{}, nil },
-		func(context.Context, *amqp.Delivery) (interface{}, error) { return struct{}{}, nil },
-		amqptransport.EncodeJSONResponse,
-		amqptransport.SubscriberErrorEncoder(amqptransport.ReplyErrorEncoder),
+		func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil },
+		func(context.Context, *amqp.Delivery) (struct{}, error) { return struct{}{}, nil },
+		amqptransport.GenericEncodeJSONResponse[struct{}],
+		amqptransport.SubscriberErrorEncoder[struct{}, struct{}](amqptransport.ReplyErrorEncoder),
 	)
 	checkReplyToFunc := func(exch, k string, mandatory, immediate bool) {}
 	outputChan := make(chan amqp.Publishing, 1)
@@ -380,14 +376,11 @@ type testRes struct {
 	Name     string `json:"n"`
 }
 
-func testEndpoint(_ context.Context, request interface{}) (interface{}, error) {
-	req, ok := request.(testReq)
-	if !ok {
-		return nil, errTypeAssertion
-	}
+func testEndpoint(_ context.Context, request testReq) (testRes, error) {
+	req := request
 	name, prs := names[req.Squadron]
 	if !prs {
-		return nil, errors.New("unknown squadron name")
+		return testRes{}, errors.New("unknown squadron name")
 	}
 	res := testRes{
 		Squadron: req.Squadron,
@@ -396,18 +389,14 @@ func testEndpoint(_ context.Context, request interface{}) (interface{}, error) {
 	return res, nil
 }
 
-func testReqDecoder(_ context.Context, d *amqp.Delivery) (interface{}, error) {
+func testReqDecoder(_ context.Context, d *amqp.Delivery) (testReq, error) {
 	var obj testReq
 	err := json.Unmarshal(d.Body, &obj)
 	return obj, err
 }
 
-func testReqEncoder(_ context.Context, p *amqp.Publishing, request interface{}) error {
-	req, ok := request.(testReq)
-	if !ok {
-		return errors.New("type assertion failure")
-	}
-	b, err := json.Marshal(req)
+func testReqEncoder(_ context.Context, p *amqp.Publishing, request testReq) error {
+	b, err := json.Marshal(request)
 	if err != nil {
 		return err
 	}
@@ -415,11 +404,11 @@ func testReqEncoder(_ context.Context, p *amqp.Publishing, request interface{}) 
 	return nil
 }
 
-func testResDeliveryDecoder(_ context.Context, d *amqp.Delivery) (interface{}, error) {
+func testResDeliveryDecoder(_ context.Context, d *amqp.Delivery) (testRes, error) {
 	return testResDecoder(d.Body)
 }
 
-func testResDecoder(b []byte) (interface{}, error) {
+func testResDecoder(b []byte) (testRes, error) {
 	var obj testRes
 	err := json.Unmarshal(b, &obj)
 	return obj, err

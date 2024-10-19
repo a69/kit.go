@@ -7,8 +7,8 @@ import (
 	"github.com/openzipkin/zipkin-go"
 	"github.com/openzipkin/zipkin-go/reporter/recorder"
 
-	"github.com/go-kit/kit/endpoint"
-	zipkinkit "github.com/go-kit/kit/tracing/zipkin"
+	"github.com/a69/kit.go/endpoint"
+	zipkinkit "github.com/a69/kit.go/tracing/zipkin"
 )
 
 const spanName = "test"
@@ -16,8 +16,8 @@ const spanName = "test"
 func TestTraceEndpoint(t *testing.T) {
 	rec := recorder.NewReporter()
 	tr, _ := zipkin.NewTracer(rec)
-	mw := zipkinkit.TraceEndpoint(tr, spanName)
-	mw(endpoint.Nop)(context.Background(), nil)
+	mw := zipkinkit.TraceEndpoint[struct{}, struct{}](tr, spanName)
+	mw(endpoint.Nop[struct{}, struct{}])(context.Background(), struct{}{})
 
 	spans := rec.Flush()
 

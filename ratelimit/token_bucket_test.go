@@ -8,29 +8,30 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/ratelimit"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/ratelimit"
 )
 
-var nopEndpoint = func(context.Context, interface{}) (interface{}, error) { return struct{}{}, nil }
+var nopEndpoint endpoint.Endpoint[struct{}, struct{}] = func(context.Context, struct{}) (struct{}, error) { return struct{}{}, nil }
 
 func TestXRateErroring(t *testing.T) {
 	limit := rate.NewLimiter(rate.Every(time.Minute), 1)
 	testSuccessThenFailure(
 		t,
-		ratelimit.NewErroringLimiter(limit)(nopEndpoint),
+		ratelimit.NewErroringLimiter[struct{}, struct{}](limit)(nopEndpoint),
 		ratelimit.ErrLimited.Error())
+
 }
 
 func TestXRateDelaying(t *testing.T) {
 	limit := rate.NewLimiter(rate.Every(time.Minute), 1)
 	testSuccessThenFailure(
 		t,
-		ratelimit.NewDelayingLimiter(limit)(nopEndpoint),
+		ratelimit.NewDelayingLimiter[struct{}, struct{}](limit)(nopEndpoint),
 		"exceed context deadline")
 }
 
-func testSuccessThenFailure(t *testing.T, e endpoint.Endpoint, failContains string) {
+func testSuccessThenFailure(t *testing.T, e endpoint.Endpoint[struct{}, struct{}], failContains string) {
 	ctx, cxl := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cxl()
 

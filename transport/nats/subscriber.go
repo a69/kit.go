@@ -3,19 +3,18 @@ package nats
 import (
 	"context"
 	"encoding/json"
-
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/transport"
-	"github.com/go-kit/log"
-
 	"github.com/nats-io/nats.go"
+
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/transport"
+	"github.com/go-kit/log"
 )
 
 // Subscriber wraps an endpoint and provides nats.MsgHandler.
-type Subscriber struct {
-	e            endpoint.Endpoint
-	dec          DecodeRequestFunc
-	enc          EncodeResponseFunc
+type Subscriber[REQ any, RES any] struct {
+	e            endpoint.Endpoint[REQ, RES]
+	dec          DecodeRequestFunc[REQ]
+	enc          EncodeResponseFunc[RES]
 	before       []RequestFunc
 	after        []SubscriberResponseFunc
 	errorEncoder ErrorEncoder
@@ -25,13 +24,13 @@ type Subscriber struct {
 
 // NewSubscriber constructs a new subscriber, which provides nats.MsgHandler and wraps
 // the provided endpoint.
-func NewSubscriber(
-	e endpoint.Endpoint,
-	dec DecodeRequestFunc,
-	enc EncodeResponseFunc,
-	options ...SubscriberOption,
-) *Subscriber {
-	s := &Subscriber{
+func NewSubscriber[REQ any, RES any](
+	e endpoint.Endpoint[REQ, RES],
+	dec DecodeRequestFunc[REQ],
+	enc EncodeResponseFunc[RES],
+	options ...SubscriberOption[REQ, RES],
+) *Subscriber[REQ, RES] {
+	s := &Subscriber[REQ, RES]{
 		e:            e,
 		dec:          dec,
 		enc:          enc,
@@ -45,26 +44,26 @@ func NewSubscriber(
 }
 
 // SubscriberOption sets an optional parameter for subscribers.
-type SubscriberOption func(*Subscriber)
+type SubscriberOption[REQ any, RES any] func(*Subscriber[REQ, RES])
 
 // SubscriberBefore functions are executed on the publisher request object before the
 // request is decoded.
-func SubscriberBefore(before ...RequestFunc) SubscriberOption {
-	return func(s *Subscriber) { s.before = append(s.before, before...) }
+func SubscriberBefore[REQ any, RES any](before ...RequestFunc) SubscriberOption[REQ, RES] {
+	return func(s *Subscriber[REQ, RES]) { s.before = append(s.before, before...) }
 }
 
 // SubscriberAfter functions are executed on the subscriber reply after the
 // endpoint is invoked, but before anything is published to the reply.
-func SubscriberAfter(after ...SubscriberResponseFunc) SubscriberOption {
-	return func(s *Subscriber) { s.after = append(s.after, after...) }
+func SubscriberAfter[REQ any, RES any](after ...SubscriberResponseFunc) SubscriberOption[REQ, RES] {
+	return func(s *Subscriber[REQ, RES]) { s.after = append(s.after, after...) }
 }
 
 // SubscriberErrorEncoder is used to encode errors to the subscriber reply
 // whenever they're encountered in the processing of a request. Clients can
 // use this to provide custom error formatting. By default,
 // errors will be published with the DefaultErrorEncoder.
-func SubscriberErrorEncoder(ee ErrorEncoder) SubscriberOption {
-	return func(s *Subscriber) { s.errorEncoder = ee }
+func SubscriberErrorEncoder[REQ any, RES any](ee ErrorEncoder) SubscriberOption[REQ, RES] {
+	return func(s *Subscriber[REQ, RES]) { s.errorEncoder = ee }
 }
 
 // SubscriberErrorLogger is used to log non-terminal errors. By default, no errors
@@ -72,26 +71,26 @@ func SubscriberErrorEncoder(ee ErrorEncoder) SubscriberOption {
 // of error handling, including logging in more detail, should be performed in a
 // custom SubscriberErrorEncoder which has access to the context.
 // Deprecated: Use SubscriberErrorHandler instead.
-func SubscriberErrorLogger(logger log.Logger) SubscriberOption {
-	return func(s *Subscriber) { s.errorHandler = transport.NewLogErrorHandler(logger) }
+func SubscriberErrorLogger[REQ any, RES any](logger log.Logger) SubscriberOption[REQ, RES] {
+	return func(s *Subscriber[REQ, RES]) { s.errorHandler = transport.NewLogErrorHandler(logger) }
 }
 
 // SubscriberErrorHandler is used to handle non-terminal errors. By default, non-terminal errors
 // are ignored. This is intended as a diagnostic measure. Finer-grained control
 // of error handling, including logging in more detail, should be performed in a
 // custom SubscriberErrorEncoder which has access to the context.
-func SubscriberErrorHandler(errorHandler transport.ErrorHandler) SubscriberOption {
-	return func(s *Subscriber) { s.errorHandler = errorHandler }
+func SubscriberErrorHandler[REQ any, RES any](errorHandler transport.ErrorHandler) SubscriberOption[REQ, RES] {
+	return func(s *Subscriber[REQ, RES]) { s.errorHandler = errorHandler }
 }
 
 // SubscriberFinalizer is executed at the end of every request from a publisher through NATS.
 // By default, no finalizer is registered.
-func SubscriberFinalizer(f ...SubscriberFinalizerFunc) SubscriberOption {
-	return func(s *Subscriber) { s.finalizer = f }
+func SubscriberFinalizer[REQ any, RES any](f ...SubscriberFinalizerFunc) SubscriberOption[REQ, RES] {
+	return func(s *Subscriber[REQ, RES]) { s.finalizer = f }
 }
 
 // ServeMsg provides nats.MsgHandler.
-func (s Subscriber) ServeMsg(nc *nats.Conn) func(msg *nats.Msg) {
+func (s Subscriber[REQ, RES]) ServeMsg(nc *nats.Conn) func(msg *nats.Msg) {
 	return func(msg *nats.Msg) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -164,7 +163,7 @@ func NopRequestDecoder(_ context.Context, _ *nats.Msg) (interface{}, error) {
 // EncodeJSONResponse is a EncodeResponseFunc that serializes the response as a
 // JSON object to the subscriber reply. Many JSON-over services can use it as
 // a sensible default.
-func EncodeJSONResponse(_ context.Context, reply string, nc *nats.Conn, response interface{}) error {
+func EncodeJSONResponse[RES any](_ context.Context, reply string, nc *nats.Conn, response RES) error {
 	b, err := json.Marshal(response)
 	if err != nil {
 		return err

@@ -1,8 +1,8 @@
 package provider
 
 import (
-	"github.com/go-kit/kit/metrics"
-	"github.com/go-kit/kit/metrics/discard"
+	"github.com/a69/kit.go/metrics"
+	"github.com/a69/kit.go/metrics/discard"
 )
 
 type discardProvider struct{}

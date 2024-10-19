@@ -8,22 +8,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd"
 )
 
 func TestRoundRobin(t *testing.T) {
 	var (
 		counts    = []int{0, 0, 0}
-		endpoints = []endpoint.Endpoint{
+		endpoints = []endpoint.Endpoint[any, any]{
 			func(context.Context, interface{}) (interface{}, error) { counts[0]++; return struct{}{}, nil },
 			func(context.Context, interface{}) (interface{}, error) { counts[1]++; return struct{}{}, nil },
 			func(context.Context, interface{}) (interface{}, error) { counts[2]++; return struct{}{}, nil },
 		}
 	)
 
-	endpointer := sd.FixedEndpointer(endpoints)
-	balancer := NewRoundRobin(endpointer)
+	endpointer := sd.FixedEndpointer[any, any](endpoints)
+	balancer := NewRoundRobin[any, any](endpointer)
 
 	for i, want := range [][]int{
 		{1, 0, 0},
@@ -46,8 +46,8 @@ func TestRoundRobin(t *testing.T) {
 }
 
 func TestRoundRobinNoEndpoints(t *testing.T) {
-	endpointer := sd.FixedEndpointer{}
-	balancer := NewRoundRobin(endpointer)
+	endpointer := sd.FixedEndpointer[any, any]{}
+	balancer := NewRoundRobin[any, any](endpointer)
 	_, err := balancer.Endpoint()
 	if want, have := ErrNoEndpoints, err; want != have {
 		t.Errorf("want %v, have %v", want, have)
@@ -55,12 +55,12 @@ func TestRoundRobinNoEndpoints(t *testing.T) {
 }
 
 func TestRoundRobinNoRace(t *testing.T) {
-	balancer := NewRoundRobin(sd.FixedEndpointer([]endpoint.Endpoint{
-		endpoint.Nop,
-		endpoint.Nop,
-		endpoint.Nop,
-		endpoint.Nop,
-		endpoint.Nop,
+	balancer := NewRoundRobin[any, any](sd.FixedEndpointer[any, any]([]endpoint.Endpoint[any, any]{
+		endpoint.Nop[any, any],
+		endpoint.Nop[any, any],
+		endpoint.Nop[any, any],
+		endpoint.Nop[any, any],
+		endpoint.Nop[any, any],
 	}))
 
 	var (

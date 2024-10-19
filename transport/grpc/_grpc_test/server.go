@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-kit/kit/endpoint"
-	grpctransport "github.com/go-kit/kit/transport/grpc"
-	"github.com/go-kit/kit/transport/grpc/_grpc_test/pb"
+	"github.com/a69/kit.go/endpoint"
+	grpctransport "github.com/a69/kit.go/transport/grpc"
+	"github.com/a69/kit.go/transport/grpc/_grpc_test/pb"
 )
 
 type service struct{}
@@ -19,11 +19,11 @@ func NewService() Service {
 	return service{}
 }
 
-func makeTestEndpoint(svc Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		req := request.(TestRequest)
+func makeTestEndpoint(svc Service) endpoint.Endpoint[TestRequest, TestResponse] {
+	return func(ctx context.Context, request TestRequest) (TestResponse, error) {
+		req := request
 		newCtx, v, err := svc.Test(ctx, req.A, req.B)
-		return &TestResponse{
+		return TestResponse{
 			V:   v,
 			Ctx: newCtx,
 		}, err
@@ -33,7 +33,7 @@ func makeTestEndpoint(svc Service) endpoint.Endpoint {
 type serverBinding struct {
 	pb.UnimplementedTestServer
 
-	test grpctransport.Handler
+	test *grpctransport.Server[TestRequest, TestResponse]
 }
 
 func (b *serverBinding) Test(ctx context.Context, req *pb.TestRequest) (*pb.TestResponse, error) {
@@ -50,18 +50,18 @@ func NewBinding(svc Service) *serverBinding {
 			makeTestEndpoint(svc),
 			decodeRequest,
 			encodeResponse,
-			grpctransport.ServerBefore(
+			grpctransport.ServerBefore[TestRequest, TestResponse](
 				extractCorrelationID,
 			),
-			grpctransport.ServerBefore(
+			grpctransport.ServerBefore[TestRequest, TestResponse](
 				displayServerRequestHeaders,
 			),
-			grpctransport.ServerAfter(
+			grpctransport.ServerAfter[TestRequest, TestResponse](
 				injectResponseHeader,
 				injectResponseTrailer,
 				injectConsumedCorrelationID,
 			),
-			grpctransport.ServerAfter(
+			grpctransport.ServerAfter[TestRequest, TestResponse](
 				displayServerResponseHeaders,
 				displayServerResponseTrailers,
 			),

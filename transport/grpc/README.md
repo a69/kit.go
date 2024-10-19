@@ -13,7 +13,7 @@ Using gRPC and go-kit together is very simple.
 First, define your service using protobuf3. This is explained
 [in gRPC documentation](http://www.grpc.io/docs/#defining-a-service).
 See
-[addsvc.proto](https://github.com/go-kit/examples/blob/master/addsvc/pb/addsvc.proto)
+[addsvc.proto](https://github.com/a69/kit.go/examples/blob/master/addsvc/pb/addsvc.proto)
 for an example. Make sure the proto definition matches your service's go-kit
 (interface) definition.
 
@@ -43,12 +43,12 @@ protoc add.proto --go_out=plugins=grpc:.
 Finally, write a tiny binding from your service definition to the gRPC
 definition. It's a simple conversion from one domain to another.
 See
-[grpc.go](https://github.com/go-kit/examples/blob/master/addsvc/pkg/addtransport/grpc.go)
+[grpc.go](https://github.com/a69/kit.go/examples/blob/master/addsvc/pkg/addtransport/grpc.go)
 for an example.
 
 That's it!
 The gRPC binding can be bound to a listener and serve normal gRPC requests.
 And within your service, you can use standard go-kit components and idioms.
-See [addsvc](https://github.com/go-kit/examples/tree/master/addsvc/) for
+See [addsvc](https://github.com/a69/kit.go/examples/tree/master/addsvc/) for
 a complete working example with gRPC support. And remember: go-kit services
 can support multiple transports simultaneously.

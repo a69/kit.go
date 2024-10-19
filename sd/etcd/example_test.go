@@ -5,9 +5,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd"
-	"github.com/go-kit/kit/sd/lb"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd"
+	"github.com/a69/kit.go/sd/lb"
 	"github.com/go-kit/log"
 )
 
@@ -55,8 +55,8 @@ func Example() {
 	if err != nil {
 		panic(err)
 	}
-	endpointer := sd.NewEndpointer(instancer, barFactory, logger)
-	balancer := lb.NewRoundRobin(endpointer)
+	endpointer := sd.NewEndpointer[any, any](instancer, barFactory, logger)
+	balancer := lb.NewRoundRobin[any, any](endpointer)
 	retry := lb.Retry(3, 3*time.Second, balancer)
 
 	// And now retry can be used like any other endpoint.
@@ -66,4 +66,6 @@ func Example() {
 	}
 }
 
-func barFactory(string) (endpoint.Endpoint, io.Closer, error) { return endpoint.Nop, nil, nil }
+func barFactory(string) (endpoint.Endpoint[any, any], io.Closer, error) {
+	return endpoint.Nop[any, any], nil, nil
+}

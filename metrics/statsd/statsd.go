@@ -14,10 +14,10 @@ import (
 	"io"
 	"time"
 
-	"github.com/go-kit/kit/metrics"
-	"github.com/go-kit/kit/metrics/internal/lv"
-	"github.com/go-kit/kit/metrics/internal/ratemap"
-	"github.com/go-kit/kit/util/conn"
+	"github.com/a69/kit.go/metrics"
+	"github.com/a69/kit.go/metrics/internal/lv"
+	"github.com/a69/kit.go/metrics/internal/ratemap"
+	"github.com/a69/kit.go/util/conn"
 	"github.com/go-kit/log"
 )
 

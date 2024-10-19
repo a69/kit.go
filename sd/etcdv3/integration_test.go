@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd"
 	"github.com/go-kit/log"
 )
 

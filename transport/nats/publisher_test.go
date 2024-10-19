@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	natstransport "github.com/go-kit/kit/transport/nats"
+	natstransport "github.com/a69/kit.go/transport/nats"
 	"github.com/nats-io/nats.go"
 )
 
@@ -33,7 +33,7 @@ func TestPublisher(t *testing.T) {
 	}
 	defer sub.Unsubscribe()
 
-	publisher := natstransport.NewPublisher(
+	publisher := natstransport.NewPublisher[any, any](
 		c,
 		"natstransport.test",
 		encode,
@@ -58,8 +58,8 @@ func TestPublisher(t *testing.T) {
 func TestPublisherBefore(t *testing.T) {
 	var (
 		testdata = "testdata"
-		encode   = func(context.Context, *nats.Msg, interface{}) error { return nil }
-		decode   = func(_ context.Context, msg *nats.Msg) (interface{}, error) {
+		encode   = func(context.Context, *nats.Msg, struct{}) error { return nil }
+		decode   = func(_ context.Context, msg *nats.Msg) (TestResponse, error) {
 			return TestResponse{string(msg.Data), ""}, nil
 		}
 	)
@@ -78,12 +78,12 @@ func TestPublisherBefore(t *testing.T) {
 	}
 	defer sub.Unsubscribe()
 
-	publisher := natstransport.NewPublisher(
+	publisher := natstransport.NewPublisher[struct{}, TestResponse](
 		c,
 		"natstransport.test",
 		encode,
 		decode,
-		natstransport.PublisherBefore(func(ctx context.Context, msg *nats.Msg) context.Context {
+		natstransport.PublisherBefore[struct{}, TestResponse](func(ctx context.Context, msg *nats.Msg) context.Context {
 			msg.Data = []byte(strings.ToUpper(string(testdata)))
 			return ctx
 		}),
@@ -94,10 +94,7 @@ func TestPublisherBefore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	response, ok := res.(TestResponse)
-	if !ok {
-		t.Fatal("response should be TestResponse")
-	}
+	response := res
 	if want, have := strings.ToUpper(testdata), response.String; want != have {
 		t.Errorf("want %q, have %q", want, have)
 	}
@@ -107,8 +104,8 @@ func TestPublisherBefore(t *testing.T) {
 func TestPublisherAfter(t *testing.T) {
 	var (
 		testdata = "testdata"
-		encode   = func(context.Context, *nats.Msg, interface{}) error { return nil }
-		decode   = func(_ context.Context, msg *nats.Msg) (interface{}, error) {
+		encode   = func(context.Context, *nats.Msg, struct{}) error { return nil }
+		decode   = func(_ context.Context, msg *nats.Msg) (TestResponse, error) {
 			return TestResponse{string(msg.Data), ""}, nil
 		}
 	)
@@ -132,7 +129,7 @@ func TestPublisherAfter(t *testing.T) {
 		"natstransport.test",
 		encode,
 		decode,
-		natstransport.PublisherAfter(func(ctx context.Context, msg *nats.Msg) context.Context {
+		natstransport.PublisherAfter[struct{}, TestResponse](func(ctx context.Context, msg *nats.Msg) context.Context {
 			msg.Data = []byte(strings.ToUpper(string(msg.Data)))
 			return ctx
 		}),
@@ -143,10 +140,7 @@ func TestPublisherAfter(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	response, ok := res.(TestResponse)
-	if !ok {
-		t.Fatal("response should be TestResponse")
-	}
+	response := res
 	if want, have := strings.ToUpper(testdata), response.String; want != have {
 		t.Errorf("want %q, have %q", want, have)
 	}
@@ -155,8 +149,8 @@ func TestPublisherAfter(t *testing.T) {
 
 func TestPublisherTimeout(t *testing.T) {
 	var (
-		encode = func(context.Context, *nats.Msg, interface{}) error { return nil }
-		decode = func(_ context.Context, msg *nats.Msg) (interface{}, error) {
+		encode = func(context.Context, *nats.Msg, struct{}) error { return nil }
+		decode = func(_ context.Context, msg *nats.Msg) (TestResponse, error) {
 			return TestResponse{string(msg.Data), ""}, nil
 		}
 	)
@@ -181,7 +175,7 @@ func TestPublisherTimeout(t *testing.T) {
 		"natstransport.test",
 		encode,
 		decode,
-		natstransport.PublisherTimeout(time.Second),
+		natstransport.PublisherTimeout[struct{}, TestResponse](time.Second),
 	)
 
 	_, err = publisher.Endpoint()(context.Background(), struct{}{})
@@ -247,18 +241,18 @@ func TestEncodeJSONRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer sub.Unsubscribe()
-
-	publisher := natstransport.NewPublisher(
+	type testREQ struct {
+		value interface{}
+		body  string
+	}
+	publisher := natstransport.NewPublisher[any, any](
 		c,
 		"natstransport.test",
-		natstransport.EncodeJSONRequest,
+		natstransport.EncodeJSONRequest[any],
 		func(context.Context, *nats.Msg) (interface{}, error) { return nil, nil },
 	).Endpoint()
 
-	for _, test := range []struct {
-		value interface{}
-		body  string
-	}{
+	for _, test := range []testREQ{
 		{nil, "null"},
 		{12, "12"},
 		{1.2, "1.2"},

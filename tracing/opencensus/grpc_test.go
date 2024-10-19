@@ -11,9 +11,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/go-kit/kit/endpoint"
-	ockit "github.com/go-kit/kit/tracing/opencensus"
-	grpctransport "github.com/go-kit/kit/transport/grpc"
+	"github.com/a69/kit.go/endpoint"
+	ockit "github.com/a69/kit.go/tracing/opencensus"
+	grpctransport "github.com/a69/kit.go/transport/grpc"
 )
 
 type dummy struct{}
@@ -33,7 +33,7 @@ func TestGRPCClientTrace(t *testing.T) {
 	trace.RegisterExporter(rec)
 
 	cc, err := grpc.Dial(
-		"",
+		"localhost",
 		grpc.WithUnaryInterceptor(unaryInterceptor),
 		grpc.WithInsecure(),
 	)
@@ -51,7 +51,7 @@ func TestGRPCClientTrace(t *testing.T) {
 	}
 
 	for _, tr := range traces {
-		clientTracer := ockit.GRPCClientTrace(
+		clientTracer := ockit.GRPCClientTrace[any, any](
 			ockit.WithName(tr.name),
 			ockit.WithSampler(trace.AlwaysSample()),
 		)
@@ -132,14 +132,14 @@ func TestGRPCServerTrace(t *testing.T) {
 		)
 
 		server := grpctransport.NewServer(
-			endpoint.Nop,
+			endpoint.Nop[any, any],
 			func(context.Context, interface{}) (interface{}, error) {
 				return nil, nil
 			},
 			func(context.Context, interface{}) (interface{}, error) {
 				return nil, tr.err
 			},
-			ockit.GRPCServerTrace(
+			ockit.GRPCServerTrace[any, any](
 				ockit.WithName(tr.name),
 				ockit.WithSampler(trace.AlwaysSample()),
 			),

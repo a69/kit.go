@@ -17,9 +17,9 @@ import (
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 
-	"github.com/go-kit/kit/endpoint"
-	ockit "github.com/go-kit/kit/tracing/opencensus"
-	jsonrpc "github.com/go-kit/kit/transport/http/jsonrpc"
+	"github.com/a69/kit.go/endpoint"
+	ockit "github.com/a69/kit.go/tracing/opencensus"
+	jsonrpc "github.com/a69/kit.go/transport/http/jsonrpc"
 )
 
 func TestJSONRPCClientTrace(t *testing.T) {
@@ -44,25 +44,25 @@ func TestJSONRPCClientTrace(t *testing.T) {
 	}
 
 	for _, tr := range traces {
-		clientTracer := ockit.JSONRPCClientTrace(
+		clientTracer := ockit.JSONRPCClientTrace[struct{}, struct{}](
 			ockit.WithName(tr.name),
 			ockit.WithSampler(trace.AlwaysSample()),
 		)
 		ep := jsonrpc.NewClient(
 			rURL,
 			endpointName,
-			jsonrpc.ClientRequestEncoder(func(ctx context.Context, i interface{}) (json.RawMessage, error) {
+			jsonrpc.ClientRequestEncoder[struct{}, struct{}](func(ctx context.Context, i *struct{}) (json.RawMessage, error) {
 				return json.RawMessage(`{}`), nil
 			}),
-			jsonrpc.ClientResponseDecoder(func(ctx context.Context, r jsonrpc.Response) (response interface{}, err error) {
-				return nil, tr.err
+			jsonrpc.ClientResponseDecoder[struct{}, struct{}](func(ctx context.Context, r jsonrpc.Response) (response struct{}, err error) {
+				return struct{}{}, tr.err
 			}),
 			clientTracer,
 		).Endpoint()
 
 		ctx, parentSpan := trace.StartSpan(context.Background(), "test")
 
-		_, err = ep(ctx, nil)
+		_, err = ep(ctx, struct{}{})
 		if want, have := tr.err, err; want != have {
 			t.Fatalf("unexpected error, want %v, have %v", tr.err, err)
 		}
@@ -125,10 +125,10 @@ func TestJSONRPCServerTrace(t *testing.T) {
 
 		handler := jsonrpc.NewServer(
 			jsonrpc.EndpointCodecMap{
-				endpointName: jsonrpc.EndpointCodec{
-					Endpoint: endpoint.Nop,
-					Decode:   func(context.Context, json.RawMessage) (interface{}, error) { return nil, nil },
-					Encode:   func(context.Context, interface{}) (json.RawMessage, error) { return nil, tr.err },
+				endpointName: jsonrpc.EndpointCodec[struct{}, struct{}]{
+					Endpoint: endpoint.Nop[struct{}, struct{}],
+					Decode:   func(context.Context, json.RawMessage) (struct{}, error) { return struct{}{}, nil },
+					Encode:   func(context.Context, struct{}) (json.RawMessage, error) { return nil, tr.err },
 				},
 			},
 			ockit.JSONRPCServerTrace(

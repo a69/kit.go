@@ -6,36 +6,36 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
+	"github.com/a69/kit.go/endpoint"
 	"github.com/go-kit/log"
 )
 
 // endpointCache collects the most recent set of instances from a service discovery
 // system, creates endpoints for them using a factory function, and makes
 // them available to consumers.
-type endpointCache struct {
+type endpointCache[REQ any, RES any] struct {
 	options            endpointerOptions
 	mtx                sync.RWMutex
-	factory            Factory
-	cache              map[string]endpointCloser
+	factory            Factory[REQ, RES]
+	cache              map[string]endpointCloser[REQ, RES]
 	err                error
-	endpoints          []endpoint.Endpoint
+	endpoints          []endpoint.Endpoint[REQ, RES]
 	logger             log.Logger
 	invalidateDeadline time.Time
 	timeNow            func() time.Time
 }
 
-type endpointCloser struct {
-	endpoint.Endpoint
+type endpointCloser[REQ any, RES any] struct {
+	endpoint.Endpoint[REQ, RES]
 	io.Closer
 }
 
 // newEndpointCache returns a new, empty endpointCache.
-func newEndpointCache(factory Factory, logger log.Logger, options endpointerOptions) *endpointCache {
-	return &endpointCache{
+func newEndpointCache[REQ any, RES any](factory Factory[REQ, RES], logger log.Logger, options endpointerOptions) *endpointCache[REQ, RES] {
+	return &endpointCache[REQ, RES]{
 		options: options,
 		factory: factory,
-		cache:   map[string]endpointCloser{},
+		cache:   map[string]endpointCloser[REQ, RES]{},
 		logger:  logger,
 		timeNow: time.Now,
 	}
@@ -45,7 +45,7 @@ func newEndpointCache(factory Factory, logger log.Logger, options endpointerOpti
 // strings whenever that set changes. The cache manufactures new endpoints via
 // the factory, closes old endpoints when they disappear, and persists existing
 // endpoints if they survive through an update.
-func (c *endpointCache) Update(event Event) {
+func (c *endpointCache[REQ, RES]) Update(event Event) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -70,12 +70,12 @@ func (c *endpointCache) Update(event Event) {
 	return
 }
 
-func (c *endpointCache) updateCache(instances []string) {
+func (c *endpointCache[REQ, RES]) updateCache(instances []string) {
 	// Deterministic order (for later).
 	sort.Strings(instances)
 
 	// Produce the current set of services.
-	cache := make(map[string]endpointCloser, len(instances))
+	cache := make(map[string]endpointCloser[REQ, RES], len(instances))
 	for _, instance := range instances {
 		// If it already exists, just copy it over.
 		if sc, ok := c.cache[instance]; ok {
@@ -90,7 +90,7 @@ func (c *endpointCache) updateCache(instances []string) {
 			c.logger.Log("instance", instance, "err", err)
 			continue
 		}
-		cache[instance] = endpointCloser{service, closer}
+		cache[instance] = endpointCloser[REQ, RES]{service, closer}
 	}
 
 	// Close any leftover endpoints.
@@ -101,7 +101,7 @@ func (c *endpointCache) updateCache(instances []string) {
 	}
 
 	// Populate the slice of endpoints.
-	endpoints := make([]endpoint.Endpoint, 0, len(cache))
+	endpoints := make([]endpoint.Endpoint[REQ, RES], 0, len(cache))
 	for _, instance := range instances {
 		// A bad factory may mean an instance is not present.
 		if _, ok := cache[instance]; !ok {
@@ -117,7 +117,7 @@ func (c *endpointCache) updateCache(instances []string) {
 
 // Endpoints yields the current set of (presumably identical) endpoints, ordered
 // lexicographically by the corresponding instance string.
-func (c *endpointCache) Endpoints() ([]endpoint.Endpoint, error) {
+func (c *endpointCache[REQ, RES]) Endpoints() ([]endpoint.Endpoint[REQ, RES], error) {
 	// in the steady state we're going to have many goroutines calling Endpoints()
 	// concurrently, so to minimize contention we use a shared R-lock.
 	c.mtx.RLock()

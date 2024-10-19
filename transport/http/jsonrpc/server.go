@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	httptransport "github.com/go-kit/kit/transport/http"
+	httptransport "github.com/a69/kit.go/transport/http"
 	"github.com/go-kit/log"
 )
 
@@ -135,40 +135,16 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decode the JSON "params"
-	reqParams, err := ecm.Decode(ctx, req.Params)
-	if err != nil {
-		s.logger.Log("err", err)
-		s.errorEncoder(ctx, err, w)
-		return
-	}
-
-	// Call the Endpoint with the params
-	response, err := ecm.Endpoint(ctx, reqParams)
-	if err != nil {
-		s.logger.Log("err", err)
-		s.errorEncoder(ctx, err, w)
-		return
-	}
-
-	for _, f := range s.after {
-		ctx = f(ctx, w)
-	}
-
 	res := Response{
 		ID:      req.ID,
 		JSONRPC: Version,
 	}
-
-	// Encode the response from the Endpoint
-	resParams, err := ecm.Encode(ctx, response)
+	res.Result, err = ecm.Handle(ctx, s.after, w, req.Params)
 	if err != nil {
 		s.logger.Log("err", err)
 		s.errorEncoder(ctx, err, w)
 		return
 	}
-
-	res.Result = resParams
 
 	w.Header().Set("Content-Type", ContentType)
 	_ = json.NewEncoder(w).Encode(res)

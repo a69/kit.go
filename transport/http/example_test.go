@@ -9,16 +9,16 @@ import (
 
 func ExamplePopulateRequestContext() {
 	handler := NewServer(
-		func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		func(ctx context.Context, _ struct{}) (response struct{}, err error) {
 			fmt.Println("Method", ctx.Value(ContextKeyRequestMethod).(string))
 			fmt.Println("RequestPath", ctx.Value(ContextKeyRequestPath).(string))
 			fmt.Println("RequestURI", ctx.Value(ContextKeyRequestURI).(string))
 			fmt.Println("X-Request-ID", ctx.Value(ContextKeyRequestXRequestID).(string))
 			return struct{}{}, nil
 		},
-		func(context.Context, *http.Request) (interface{}, error) { return struct{}{}, nil },
-		func(context.Context, http.ResponseWriter, interface{}) error { return nil },
-		ServerBefore(PopulateRequestContext),
+		func(context.Context, *http.Request) (struct{}, error) { return struct{}{}, nil },
+		func(context.Context, http.ResponseWriter, struct{}) error { return nil },
+		ServerBefore[struct{}, struct{}](PopulateRequestContext),
 	)
 
 	server := httptest.NewServer(handler)

@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-zookeeper/zk"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd"
 	"github.com/go-kit/log"
 )
 
@@ -103,17 +103,17 @@ func (c *fakeClient) ErrorIsConsumedWithin(timeout time.Duration) error {
 
 func (c *fakeClient) Stop() {}
 
-func newFactory(fakeError string) sd.Factory {
-	return func(instance string) (endpoint.Endpoint, io.Closer, error) {
+func newFactory(fakeError string) sd.Factory[any, any] {
+	return func(instance string) (endpoint.Endpoint[any, any], io.Closer, error) {
 		if fakeError == instance {
 			return nil, nil, errors.New(fakeError)
 		}
-		return endpoint.Nop, nil, nil
+		return endpoint.Nop[any, any], nil, nil
 	}
 }
 
-func asyncTest(timeout time.Duration, want int, s sd.Endpointer) (err error) {
-	var endpoints []endpoint.Endpoint
+func asyncTest(timeout time.Duration, want int, s sd.Endpointer[any, any]) (err error) {
+	var endpoints []endpoint.Endpoint[any, any]
 	have := -1 // want can never be <0
 	t := time.After(timeout)
 	for {

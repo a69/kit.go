@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
+	"github.com/a69/kit.go/endpoint"
 )
 
 // RetryError is an error wrapper that is used by the retry mechanism. All
@@ -41,8 +41,8 @@ type Callback func(n int, received error) (keepTrying bool, replacement error)
 // automatically load balanced via the load balancer. Requests that return
 // errors will be retried until they succeed, up to max times, or until the
 // timeout is elapsed, whichever comes first.
-func Retry(max int, timeout time.Duration, b Balancer) endpoint.Endpoint {
-	return RetryWithCallback(timeout, b, maxRetries(max))
+func Retry[REQ any, RES any](max int, timeout time.Duration, b Balancer[REQ, RES]) endpoint.Endpoint[REQ, RES] {
+	return RetryWithCallback[REQ, RES](timeout, b, maxRetries(max))
 }
 
 func maxRetries(max int) Callback {
@@ -61,7 +61,7 @@ func alwaysRetry(int, error) (keepTrying bool, replacement error) {
 // that return errors will be retried until they succeed, up to max times, until
 // the callback returns false, or until the timeout is elapsed, whichever comes
 // first.
-func RetryWithCallback(timeout time.Duration, b Balancer, cb Callback) endpoint.Endpoint {
+func RetryWithCallback[REQ any, RES any](timeout time.Duration, b Balancer[REQ, RES], cb Callback) endpoint.Endpoint[REQ, RES] {
 	if cb == nil {
 		cb = alwaysRetry
 	}
@@ -69,10 +69,10 @@ func RetryWithCallback(timeout time.Duration, b Balancer, cb Callback) endpoint.
 		panic("nil Balancer")
 	}
 
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+	return func(ctx context.Context, request REQ) (response RES, err error) {
 		var (
 			newctx, cancel = context.WithTimeout(ctx, timeout)
-			responses      = make(chan interface{}, 1)
+			responses      = make(chan RES, 1)
 			errs           = make(chan error, 1)
 			final          RetryError
 		)
@@ -85,22 +85,23 @@ func RetryWithCallback(timeout time.Duration, b Balancer, cb Callback) endpoint.
 					errs <- err
 					return
 				}
-				response, err := e(newctx, request)
+				res, err := e(newctx, request)
 				if err != nil {
 					errs <- err
 					return
 				}
-				responses <- response
+				responses <- res
 			}()
 
 			select {
 			case <-newctx.Done():
-				return nil, newctx.Err()
+				err = newctx.Err()
+				return
 
-			case response := <-responses:
+			case response = <-responses:
 				return response, nil
 
-			case err := <-errs:
+			case err = <-errs:
 				final.RawErrors = append(final.RawErrors, err)
 				keepTrying, replacement := cb(i, err)
 				if replacement != nil {
@@ -108,7 +109,8 @@ func RetryWithCallback(timeout time.Duration, b Balancer, cb Callback) endpoint.
 				}
 				if !keepTrying {
 					final.Final = err
-					return nil, final
+					err = final
+					return
 				}
 				continue
 			}

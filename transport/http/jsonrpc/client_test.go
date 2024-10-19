@@ -10,7 +10,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/go-kit/kit/transport/http/jsonrpc"
+	"github.com/a69/kit.go/transport/http/jsonrpc"
 )
 
 type TestResponse struct {
@@ -91,15 +91,15 @@ func TestBeforeAfterFuncs(t *testing.T) {
 			sut := jsonrpc.NewClient(
 				testUrl,
 				"dummy",
-				jsonrpc.ClientBefore(func(ctx context.Context, req *http.Request) context.Context {
+				jsonrpc.ClientBefore[testServerResponseOptions, struct{}](func(ctx context.Context, req *http.Request) context.Context {
 					beforeCalled = true
 					return ctx
 				}),
-				jsonrpc.ClientAfter(func(ctx context.Context, resp *http.Response) context.Context {
+				jsonrpc.ClientAfter[testServerResponseOptions, struct{}](func(ctx context.Context, resp *http.Response) context.Context {
 					afterCalled = true
 					return ctx
 				}),
-				jsonrpc.ClientFinalizer(func(ctx context.Context, err error) {
+				jsonrpc.ClientFinalizer[testServerResponseOptions, struct{}](func(ctx context.Context, err error) {
 					finalizerCalled = true
 				}),
 			)
@@ -128,6 +128,10 @@ func (g staticIDGenerator) Generate() interface{} { return g }
 func TestClientHappyPath(t *testing.T) {
 	t.Parallel()
 
+	type addRequest struct {
+		A int
+		B int
+	}
 	var (
 		afterCalledKey    = "AC"
 		beforeHeaderKey   = "BF"
@@ -138,7 +142,7 @@ func TestClientHappyPath(t *testing.T) {
 			r.Header.Add(beforeHeaderKey, beforeHeaderValue)
 			return ctx
 		}
-		encode = func(ctx context.Context, req interface{}) (json.RawMessage, error) {
+		encode = func(ctx context.Context, req *addRequest) (json.RawMessage, error) {
 			return json.Marshal(req)
 		}
 		afterFunc = func(ctx context.Context, r *http.Response) context.Context {
@@ -148,14 +152,14 @@ func TestClientHappyPath(t *testing.T) {
 		fin             = func(ctx context.Context, err error) {
 			finalizerCalled = true
 		}
-		decode = func(ctx context.Context, res jsonrpc.Response) (interface{}, error) {
+		decode = func(ctx context.Context, res jsonrpc.Response) (int, error) {
 			if ac := ctx.Value(afterCalledKey); ac == nil {
 				t.Fatal("after not called")
 			}
 			var result int
 			err := json.Unmarshal(res.Result, &result)
 			if err != nil {
-				return nil, err
+				return 0, err
 			}
 			return result, nil
 		}
@@ -179,24 +183,18 @@ func TestClientHappyPath(t *testing.T) {
 		w.Write([]byte(testbody))
 	}))
 	defer server.Close()
-
 	sut := jsonrpc.NewClient(
 		mustParse(server.URL),
 		"add",
-		jsonrpc.ClientRequestEncoder(encode),
-		jsonrpc.ClientResponseDecoder(decode),
-		jsonrpc.ClientBefore(beforeFunc),
-		jsonrpc.ClientAfter(afterFunc),
-		jsonrpc.ClientRequestIDGenerator(gen),
-		jsonrpc.ClientFinalizer(fin),
-		jsonrpc.SetClient(http.DefaultClient),
-		jsonrpc.BufferedStream(false),
+		jsonrpc.ClientRequestEncoder[addRequest, int](encode),
+		jsonrpc.ClientResponseDecoder[addRequest, int](decode),
+		jsonrpc.ClientBefore[addRequest, int](beforeFunc),
+		jsonrpc.ClientAfter[addRequest, int](afterFunc),
+		jsonrpc.ClientRequestIDGenerator[addRequest, int](gen),
+		jsonrpc.ClientFinalizer[addRequest, int](fin),
+		jsonrpc.SetClient[addRequest, int](http.DefaultClient),
+		jsonrpc.BufferedStream[addRequest, int](false),
 	)
-
-	type addRequest struct {
-		A int
-		B int
-	}
 
 	in := addRequest{2, 2}
 
@@ -204,10 +202,7 @@ func TestClientHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ri, ok := result.(int)
-	if !ok {
-		t.Fatalf("result is not int: (%T)%+v", result, result)
-	}
+	ri := result
 	if ri != 5 {
 		t.Fatalf("want=5, got=%d", ri)
 	}
@@ -242,6 +237,11 @@ func TestClientHappyPath(t *testing.T) {
 func TestCanUseDefaults(t *testing.T) {
 	t.Parallel()
 
+	type addRequest struct {
+		A int
+		B int
+	}
+
 	var (
 		testbody    = `{"jsonrpc":"2.0", "result":"boogaloo"}`
 		requestBody []byte
@@ -259,15 +259,10 @@ func TestCanUseDefaults(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut := jsonrpc.NewClient(
+	sut := jsonrpc.NewClient[addRequest, string](
 		mustParse(server.URL),
 		"add",
 	)
-
-	type addRequest struct {
-		A int
-		B int
-	}
 
 	in := addRequest{2, 2}
 
@@ -275,10 +270,7 @@ func TestCanUseDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rs, ok := result.(string)
-	if !ok {
-		t.Fatalf("result is not string: (%T)%+v", result, result)
-	}
+	rs := result
 	if rs != "boogaloo" {
 		t.Fatalf("want=boogaloo, got=%s", rs)
 	}
@@ -315,7 +307,7 @@ func TestClientCanHandleJSONRPCError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sut := jsonrpc.NewClient(mustParse(server.URL), "add")
+	sut := jsonrpc.NewClient[int, struct{}](mustParse(server.URL), "add")
 
 	_, err := sut.Endpoint()(context.Background(), 5)
 	if err == nil {

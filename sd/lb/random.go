@@ -3,24 +3,24 @@ package lb
 import (
 	"math/rand"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd"
 )
 
 // NewRandom returns a load balancer that selects services randomly.
-func NewRandom(s sd.Endpointer, seed int64) Balancer {
-	return &random{
+func NewRandom[REQ any, RES any](s sd.Endpointer[REQ, RES], seed int64) Balancer[REQ, RES] {
+	return &random[REQ, RES]{
 		s: s,
 		r: rand.New(rand.NewSource(seed)),
 	}
 }
 
-type random struct {
-	s sd.Endpointer
+type random[REQ any, RES any] struct {
+	s sd.Endpointer[REQ, RES]
 	r *rand.Rand
 }
 
-func (r *random) Endpoint() (endpoint.Endpoint, error) {
+func (r *random[REQ, RES]) Endpoint() (endpoint.Endpoint[REQ, RES], error) {
 	endpoints, err := r.s.Endpoints()
 	if err != nil {
 		return nil, err

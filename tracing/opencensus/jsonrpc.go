@@ -8,12 +8,12 @@ import (
 	"go.opencensus.io/plugin/ochttp/propagation/b3"
 	"go.opencensus.io/trace"
 
-	kithttp "github.com/go-kit/kit/transport/http"
-	jsonrpc "github.com/go-kit/kit/transport/http/jsonrpc"
+	kithttp "github.com/a69/kit.go/transport/http"
+	jsonrpc "github.com/a69/kit.go/transport/http/jsonrpc"
 )
 
 // JSONRPCClientTrace enables OpenCensus tracing of a Go kit JSONRPC transport client.
-func JSONRPCClientTrace(options ...TracerOption) jsonrpc.ClientOption {
+func JSONRPCClientTrace[REQ any, RES any](options ...TracerOption) jsonrpc.ClientOption[REQ, RES] {
 	cfg := TracerOptions{}
 
 	for _, option := range options {
@@ -24,7 +24,7 @@ func JSONRPCClientTrace(options ...TracerOption) jsonrpc.ClientOption {
 		cfg.HTTPPropagate = &b3.HTTPFormat{}
 	}
 
-	clientBefore := jsonrpc.ClientBefore(
+	clientBefore := jsonrpc.ClientBefore[REQ, RES](
 		func(ctx context.Context, req *http.Request) context.Context {
 			var name string
 
@@ -57,7 +57,7 @@ func JSONRPCClientTrace(options ...TracerOption) jsonrpc.ClientOption {
 		},
 	)
 
-	clientAfter := jsonrpc.ClientAfter(
+	clientAfter := jsonrpc.ClientAfter[REQ, RES](
 		func(ctx context.Context, res *http.Response) context.Context {
 			if span := trace.FromContext(ctx); span != nil {
 				span.SetStatus(ochttp.TraceStatus(res.StatusCode, http.StatusText(res.StatusCode)))
@@ -69,7 +69,7 @@ func JSONRPCClientTrace(options ...TracerOption) jsonrpc.ClientOption {
 		},
 	)
 
-	clientFinalizer := jsonrpc.ClientFinalizer(
+	clientFinalizer := jsonrpc.ClientFinalizer[REQ, RES](
 		func(ctx context.Context, err error) {
 			if span := trace.FromContext(ctx); span != nil {
 				if err != nil {
@@ -83,7 +83,7 @@ func JSONRPCClientTrace(options ...TracerOption) jsonrpc.ClientOption {
 		},
 	)
 
-	return func(c *jsonrpc.Client) {
+	return func(c *jsonrpc.Client[REQ, RES]) {
 		clientBefore(c)
 		clientAfter(c)
 		clientFinalizer(c)

@@ -14,9 +14,9 @@ import (
 	"go.opencensus.io/trace"
 	"go.opencensus.io/trace/propagation"
 
-	"github.com/go-kit/kit/endpoint"
-	ockit "github.com/go-kit/kit/tracing/opencensus"
-	kithttp "github.com/go-kit/kit/transport/http"
+	"github.com/a69/kit.go/endpoint"
+	ockit "github.com/a69/kit.go/tracing/opencensus"
+	kithttp "github.com/a69/kit.go/transport/http"
 )
 
 func TestHTTPClientTrace(t *testing.T) {
@@ -38,14 +38,14 @@ func TestHTTPClientTrace(t *testing.T) {
 	}
 
 	for _, tr := range traces {
-		clientTracer := ockit.HTTPClientTrace(
+		clientTracer := ockit.HTTPClientTrace[any, any](
 			ockit.WithName(tr.name),
 			ockit.WithSampler(trace.AlwaysSample()),
 		)
 		ep := kithttp.NewClient(
 			"GET",
 			rURL,
-			func(ctx context.Context, r *http.Request, i interface{}) error {
+			func(ctx context.Context, r *http.Request, i *interface{}) error {
 				return nil
 			},
 			func(ctx context.Context, r *http.Response) (response interface{}, err error) {
@@ -115,10 +115,10 @@ func TestHTTPServerTrace(t *testing.T) {
 		var client http.Client
 
 		handler := kithttp.NewServer(
-			endpoint.Nop,
+			endpoint.Nop[any, any],
 			func(context.Context, *http.Request) (interface{}, error) { return nil, nil },
 			func(context.Context, http.ResponseWriter, interface{}) error { return errors.New("dummy") },
-			ockit.HTTPServerTrace(
+			ockit.HTTPServerTrace[any, any](
 				ockit.WithName(tr.name),
 				ockit.WithSampler(trace.AlwaysSample()),
 				ockit.WithHTTPPropagation(tr.propagation),

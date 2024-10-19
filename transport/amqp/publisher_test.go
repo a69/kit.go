@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	amqptransport "github.com/go-kit/kit/transport/amqp"
+	amqptransport "github.com/a69/kit.go/transport/amqp"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -23,8 +23,8 @@ func TestBadEncode(t *testing.T) {
 	pub := amqptransport.NewPublisher(
 		ch,
 		q,
-		func(context.Context, *amqp.Publishing, interface{}) error { return errors.New("err!") },
-		func(context.Context, *amqp.Delivery) (response interface{}, err error) { return struct{}{}, nil },
+		func(context.Context, *amqp.Publishing, struct{}) error { return errors.New("err!") },
+		func(context.Context, *amqp.Delivery) (response struct{}, err error) { return struct{}{}, nil },
 	)
 	errChan := make(chan error, 1)
 	var err error
@@ -65,11 +65,11 @@ func TestBadDecode(t *testing.T) {
 	pub := amqptransport.NewPublisher(
 		ch,
 		q,
-		func(context.Context, *amqp.Publishing, interface{}) error { return nil },
-		func(context.Context, *amqp.Delivery) (response interface{}, err error) {
+		func(context.Context, *amqp.Publishing, struct{}) error { return nil },
+		func(context.Context, *amqp.Delivery) (response struct{}, err error) {
 			return struct{}{}, errors.New("err!")
 		},
-		amqptransport.PublisherBefore(
+		amqptransport.PublisherBefore[struct{}, struct{}](
 			amqptransport.SetCorrelationID(cid),
 		),
 	)
@@ -110,11 +110,11 @@ func TestPublisherTimeout(t *testing.T) {
 	pub := amqptransport.NewPublisher(
 		ch,
 		q,
-		func(context.Context, *amqp.Publishing, interface{}) error { return nil },
-		func(context.Context, *amqp.Delivery) (response interface{}, err error) {
+		func(context.Context, *amqp.Publishing, struct{}) error { return nil },
+		func(context.Context, *amqp.Delivery) (response struct{}, err error) {
 			return struct{}{}, nil
 		},
-		amqptransport.PublisherTimeout(50*time.Millisecond),
+		amqptransport.PublisherTimeout[struct{}, struct{}](50*time.Millisecond),
 	)
 
 	var err error
@@ -170,7 +170,7 @@ func TestSuccessfulPublisher(t *testing.T) {
 		q,
 		testReqEncoder,
 		testResDeliveryDecoder,
-		amqptransport.PublisherBefore(
+		amqptransport.PublisherBefore[testReq, testRes](
 			amqptransport.SetCorrelationID(cid),
 		),
 	)
@@ -237,12 +237,12 @@ func TestSendAndForgetPublisher(t *testing.T) {
 	pub := amqptransport.NewPublisher(
 		ch,
 		q,
-		func(context.Context, *amqp.Publishing, interface{}) error { return nil },
-		func(context.Context, *amqp.Delivery) (response interface{}, err error) {
+		func(context.Context, *amqp.Publishing, struct{}) error { return nil },
+		func(context.Context, *amqp.Delivery) (response struct{}, err error) {
 			return struct{}{}, nil
 		},
-		amqptransport.PublisherDeliverer(amqptransport.SendAndForgetDeliverer),
-		amqptransport.PublisherTimeout(50*time.Millisecond),
+		amqptransport.PublisherDeliverer[struct{}, struct{}](amqptransport.SendAndForgetDeliverer[struct{}, struct{}]),
+		amqptransport.PublisherTimeout[struct{}, struct{}](50*time.Millisecond),
 	)
 
 	var err error

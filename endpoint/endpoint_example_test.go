@@ -4,14 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-kit/kit/endpoint"
+	"github.com/a69/kit.go/endpoint"
 )
 
 func ExampleChain() {
-	e := endpoint.Chain(
-		annotate("first"),
-		annotate("second"),
-		annotate("third"),
+	e := endpoint.Chain[struct{}, struct{}](
+		annotate[struct{}, struct{}]("first"),
+		annotate[struct{}, struct{}]("second"),
+		annotate[struct{}, struct{}]("third"),
 	)(myEndpoint)
 
 	if _, err := e(ctx, req); err != nil {
@@ -33,9 +33,9 @@ var (
 	req = struct{}{}
 )
 
-func annotate(s string) endpoint.Middleware {
-	return func(next endpoint.Endpoint) endpoint.Endpoint {
-		return func(ctx context.Context, request interface{}) (interface{}, error) {
+func annotate[REQ any, RES any](s string) endpoint.Middleware[REQ, RES] {
+	return func(next endpoint.Endpoint[REQ, RES]) endpoint.Endpoint[REQ, RES] {
+		return func(ctx context.Context, request REQ) (RES, error) {
 			fmt.Println(s, "pre")
 			defer fmt.Println(s, "post")
 			return next(ctx, request)
@@ -43,7 +43,7 @@ func annotate(s string) endpoint.Middleware {
 	}
 }
 
-func myEndpoint(context.Context, interface{}) (interface{}, error) {
+func myEndpoint(context.Context, struct{}) (struct{}, error) {
 	fmt.Println("my endpoint!")
 	return struct{}{}, nil
 }

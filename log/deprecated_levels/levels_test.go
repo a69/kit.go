@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	levels "github.com/go-kit/kit/log/deprecated_levels"
+	levels "github.com/a69/kit.go/log/deprecated_levels"
 	"github.com/go-kit/log"
 )
 

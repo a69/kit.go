@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/go-kit/kit/endpoint"
+	"github.com/a69/kit.go/endpoint"
 )
 
 // HTTPClient is an interface that models *http.Client.
@@ -19,10 +19,10 @@ type HTTPClient interface {
 }
 
 // Client wraps a URL and provides a method that implements endpoint.Endpoint.
-type Client struct {
+type Client[REQ any, RES any] struct {
 	client         HTTPClient
-	req            CreateRequestFunc
-	dec            DecodeResponseFunc
+	req            CreateRequestFunc[REQ]
+	dec            DecodeResponseFunc[RES]
 	before         []RequestFunc
 	after          []ClientResponseFunc
 	finalizer      []ClientFinalizerFunc
@@ -30,15 +30,15 @@ type Client struct {
 }
 
 // NewClient constructs a usable Client for a single remote method.
-func NewClient(method string, tgt *url.URL, enc EncodeRequestFunc, dec DecodeResponseFunc, options ...ClientOption) *Client {
+func NewClient[REQ any, RES any](method string, tgt *url.URL, enc EncodeRequestFunc[REQ], dec DecodeResponseFunc[RES], options ...ClientOption[REQ, RES]) *Client[REQ, RES] {
 	return NewExplicitClient(makeCreateRequestFunc(method, tgt, enc), dec, options...)
 }
 
 // NewExplicitClient is like NewClient but uses a CreateRequestFunc instead of a
 // method, target URL, and EncodeRequestFunc, which allows for more control over
 // the outgoing HTTP request.
-func NewExplicitClient(req CreateRequestFunc, dec DecodeResponseFunc, options ...ClientOption) *Client {
-	c := &Client{
+func NewExplicitClient[REQ any, RES any](req CreateRequestFunc[REQ], dec DecodeResponseFunc[RES], options ...ClientOption[REQ, RES]) *Client[REQ, RES] {
+	c := &Client[REQ, RES]{
 		client: http.DefaultClient,
 		req:    req,
 		dec:    dec,
@@ -50,51 +50,49 @@ func NewExplicitClient(req CreateRequestFunc, dec DecodeResponseFunc, options ..
 }
 
 // ClientOption sets an optional parameter for clients.
-type ClientOption func(*Client)
+type ClientOption[REQ any, RES any] func(*Client[REQ, RES])
 
 // SetClient sets the underlying HTTP client used for requests.
 // By default, http.DefaultClient is used.
-func SetClient(client HTTPClient) ClientOption {
-	return func(c *Client) { c.client = client }
+func SetClient[REQ any, RES any](client HTTPClient) ClientOption[REQ, RES] {
+	return func(c *Client[REQ, RES]) { c.client = client }
 }
 
 // ClientBefore adds one or more RequestFuncs to be applied to the outgoing HTTP
 // request before it's invoked.
-func ClientBefore(before ...RequestFunc) ClientOption {
-	return func(c *Client) { c.before = append(c.before, before...) }
+func ClientBefore[REQ any, RES any](before ...RequestFunc) ClientOption[REQ, RES] {
+	return func(c *Client[REQ, RES]) { c.before = append(c.before, before...) }
 }
 
 // ClientAfter adds one or more ClientResponseFuncs, which are applied to the
 // incoming HTTP response prior to it being decoded. This is useful for
 // obtaining anything off of the response and adding it into the context prior
 // to decoding.
-func ClientAfter(after ...ClientResponseFunc) ClientOption {
-	return func(c *Client) { c.after = append(c.after, after...) }
+func ClientAfter[REQ any, RES any](after ...ClientResponseFunc) ClientOption[REQ, RES] {
+	return func(c *Client[REQ, RES]) { c.after = append(c.after, after...) }
 }
 
 // ClientFinalizer adds one or more ClientFinalizerFuncs to be executed at the
 // end of every HTTP request. Finalizers are executed in the order in which they
 // were added. By default, no finalizer is registered.
-func ClientFinalizer(f ...ClientFinalizerFunc) ClientOption {
-	return func(s *Client) { s.finalizer = append(s.finalizer, f...) }
+func ClientFinalizer[REQ any, RES any](f ...ClientFinalizerFunc) ClientOption[REQ, RES] {
+	return func(s *Client[REQ, RES]) { s.finalizer = append(s.finalizer, f...) }
 }
 
 // BufferedStream sets whether the HTTP response body is left open, allowing it
 // to be read from later. Useful for transporting a file as a buffered stream.
 // That body has to be drained and closed to properly end the request.
-func BufferedStream(buffered bool) ClientOption {
-	return func(c *Client) { c.bufferedStream = buffered }
+func BufferedStream[REQ any, RES any](buffered bool) ClientOption[REQ, RES] {
+	return func(c *Client[REQ, RES]) { c.bufferedStream = buffered }
 }
 
 // Endpoint returns a usable Go kit endpoint that calls the remote HTTP endpoint.
-func (c Client) Endpoint() endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
+func (c Client[REQ, RES]) Endpoint() endpoint.Endpoint[REQ, RES] {
+	return func(ctx context.Context, request REQ) (response RES, err error) {
 		ctx, cancel := context.WithCancel(ctx)
 
-		var (
-			resp *http.Response
-			err  error
-		)
+		var resp *http.Response
+
 		if c.finalizer != nil {
 			defer func() {
 				if resp != nil {
@@ -110,7 +108,7 @@ func (c Client) Endpoint() endpoint.Endpoint {
 		req, err := c.req(ctx, request)
 		if err != nil {
 			cancel()
-			return nil, err
+			return
 		}
 
 		for _, f := range c.before {
@@ -120,7 +118,7 @@ func (c Client) Endpoint() endpoint.Endpoint {
 		resp, err = c.client.Do(req.WithContext(ctx))
 		if err != nil {
 			cancel()
-			return nil, err
+			return
 		}
 
 		// If the caller asked for a buffered stream, we don't cancel the
@@ -137,12 +135,7 @@ func (c Client) Endpoint() endpoint.Endpoint {
 			ctx = f(ctx, resp)
 		}
 
-		response, err := c.dec(ctx, resp)
-		if err != nil {
-			return nil, err
-		}
-
-		return response, nil
+		return c.dec(ctx, resp)
 	}
 }
 
@@ -172,13 +165,7 @@ type ClientFinalizerFunc func(ctx context.Context, err error)
 // JSON object to the Request body. Many JSON-over-HTTP services can use it as
 // a sensible default. If the request implements Headerer, the provided headers
 // will be applied to the request.
-func EncodeJSONRequest(c context.Context, r *http.Request, request interface{}) error {
-	r.Header.Set("Content-Type", "application/json; charset=utf-8")
-	if headerer, ok := request.(Headerer); ok {
-		for k := range headerer.Headers() {
-			r.Header.Set(k, headerer.Headers().Get(k))
-		}
-	}
+func EncodeJSONRequest(c context.Context, r *http.Request, request *interface{}) error {
 	var b bytes.Buffer
 	r.Body = ioutil.NopCloser(&b)
 	return json.NewEncoder(&b).Encode(request)
@@ -203,14 +190,14 @@ func EncodeXMLRequest(c context.Context, r *http.Request, request interface{}) e
 //
 //
 
-func makeCreateRequestFunc(method string, target *url.URL, enc EncodeRequestFunc) CreateRequestFunc {
-	return func(ctx context.Context, request interface{}) (*http.Request, error) {
+func makeCreateRequestFunc[REQ any](method string, target *url.URL, enc EncodeRequestFunc[REQ]) CreateRequestFunc[REQ] {
+	return func(ctx context.Context, request REQ) (*http.Request, error) {
 		req, err := http.NewRequest(method, target.String(), nil)
 		if err != nil {
 			return nil, err
 		}
 
-		if err = enc(ctx, req, request); err != nil {
+		if err = enc(ctx, req, &request); err != nil {
 			return nil, err
 		}
 

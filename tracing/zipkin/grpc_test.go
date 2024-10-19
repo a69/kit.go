@@ -10,9 +10,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
-	"github.com/go-kit/kit/endpoint"
-	kitzipkin "github.com/go-kit/kit/tracing/zipkin"
-	grpctransport "github.com/go-kit/kit/transport/grpc"
+	"github.com/a69/kit.go/endpoint"
+	kitzipkin "github.com/a69/kit.go/tracing/zipkin"
+	grpctransport "github.com/a69/kit.go/transport/grpc"
 )
 
 type dummy struct{}
@@ -30,10 +30,10 @@ func TestGRPCClientTrace(t *testing.T) {
 
 	tr, _ := zipkin.NewTracer(rec)
 
-	clientTracer := kitzipkin.GRPCClientTrace(tr)
+	clientTracer := kitzipkin.GRPCClientTrace[struct{}, struct{}](tr)
 
 	cc, err := grpc.Dial(
-		"",
+		"localhost",
 		grpc.WithUnaryInterceptor(unaryInterceptor),
 		grpc.WithInsecure(),
 	)
@@ -41,12 +41,12 @@ func TestGRPCClientTrace(t *testing.T) {
 		t.Fatalf("unable to create gRPC dialer: %s", err.Error())
 	}
 
-	ep := grpctransport.NewClient(
+	ep := grpctransport.NewClient[struct{}, struct{}](
 		cc,
 		"dummyService",
 		"dummyMethod",
-		func(context.Context, interface{}) (interface{}, error) { return nil, nil },
-		func(context.Context, interface{}) (interface{}, error) { return nil, nil },
+		func(context.Context, struct{}) (interface{}, error) { return nil, nil },
+		func(context.Context, interface{}) (struct{}, error) { return struct{}{}, nil },
 		dummy{},
 		clientTracer,
 	).Endpoint()
@@ -54,7 +54,7 @@ func TestGRPCClientTrace(t *testing.T) {
 	parentSpan := tr.StartSpan("test")
 	ctx := zipkin.NewContext(context.Background(), parentSpan)
 
-	if _, err = ep(ctx, nil); err != nil {
+	if _, err = ep(ctx, struct{}{}); err != nil {
 		t.Errorf("unexpected error: %s", err.Error())
 	}
 
@@ -78,10 +78,10 @@ func TestGRPCServerTrace(t *testing.T) {
 
 	tr, _ := zipkin.NewTracer(rec)
 
-	serverTracer := kitzipkin.GRPCServerTrace(tr)
+	serverTracer := kitzipkin.GRPCServerTrace[any, any](tr)
 
 	server := grpctransport.NewServer(
-		endpoint.Nop,
+		endpoint.Nop[any, any],
 		func(context.Context, interface{}) (interface{}, error) { return nil, nil },
 		func(context.Context, interface{}) (interface{}, error) { return nil, nil },
 		serverTracer,

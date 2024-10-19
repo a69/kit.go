@@ -6,15 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd"
-	"github.com/go-kit/kit/sd/lb"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd"
+	"github.com/a69/kit.go/sd/lb"
 )
 
 func TestRetryMaxTotalFail(t *testing.T) {
 	var (
-		endpoints = sd.FixedEndpointer{} // no endpoints
-		rr        = lb.NewRoundRobin(endpoints)
+		endpoints = sd.FixedEndpointer[any, any]{} // no endpoints
+		rr        = lb.NewRoundRobin[any, any](endpoints)
 		retry     = lb.Retry(999, time.Second, rr) // lots of retries
 		ctx       = context.Background()
 	)
@@ -25,18 +25,18 @@ func TestRetryMaxTotalFail(t *testing.T) {
 
 func TestRetryMaxPartialFail(t *testing.T) {
 	var (
-		endpoints = []endpoint.Endpoint{
+		endpoints = []endpoint.Endpoint[any, any]{
 			func(context.Context, interface{}) (interface{}, error) { return nil, errors.New("error one") },
 			func(context.Context, interface{}) (interface{}, error) { return nil, errors.New("error two") },
 			func(context.Context, interface{}) (interface{}, error) { return struct{}{}, nil /* OK */ },
 		}
-		endpointer = sd.FixedEndpointer{
+		endpointer = sd.FixedEndpointer[any, any]{
 			0: endpoints[0],
 			1: endpoints[1],
 			2: endpoints[2],
 		}
 		retries = len(endpoints) - 1 // not quite enough retries
-		rr      = lb.NewRoundRobin(endpointer)
+		rr      = lb.NewRoundRobin[any, any](endpointer)
 		ctx     = context.Background()
 	)
 	if _, err := lb.Retry(retries, time.Second, rr)(ctx, struct{}{}); err == nil {
@@ -46,18 +46,18 @@ func TestRetryMaxPartialFail(t *testing.T) {
 
 func TestRetryMaxSuccess(t *testing.T) {
 	var (
-		endpoints = []endpoint.Endpoint{
+		endpoints = []endpoint.Endpoint[any, any]{
 			func(context.Context, interface{}) (interface{}, error) { return nil, errors.New("error one") },
 			func(context.Context, interface{}) (interface{}, error) { return nil, errors.New("error two") },
 			func(context.Context, interface{}) (interface{}, error) { return struct{}{}, nil /* OK */ },
 		}
-		endpointer = sd.FixedEndpointer{
+		endpointer = sd.FixedEndpointer[any, any]{
 			0: endpoints[0],
 			1: endpoints[1],
 			2: endpoints[2],
 		}
 		retries = len(endpoints) // exactly enough retries
-		rr      = lb.NewRoundRobin(endpointer)
+		rr      = lb.NewRoundRobin[any, any](endpointer)
 		ctx     = context.Background()
 	)
 	if _, err := lb.Retry(retries, time.Second, rr)(ctx, struct{}{}); err != nil {
@@ -70,7 +70,7 @@ func TestRetryTimeout(t *testing.T) {
 		step    = make(chan struct{})
 		e       = func(context.Context, interface{}) (interface{}, error) { <-step; return struct{}{}, nil }
 		timeout = time.Millisecond
-		retry   = lb.Retry(999, timeout, lb.NewRoundRobin(sd.FixedEndpointer{0: e}))
+		retry   = lb.Retry(999, timeout, lb.NewRoundRobin[any, any](sd.FixedEndpointer[any, any]{0: e}))
 		errs    = make(chan error, 1)
 		invoke  = func() { _, err := retry(context.Background(), struct{}{}); errs <- err }
 	)
@@ -92,8 +92,8 @@ func TestAbortEarlyCustomMessage(t *testing.T) {
 	var (
 		myErr     = errors.New("aborting early")
 		cb        = func(int, error) (bool, error) { return false, myErr }
-		endpoints = sd.FixedEndpointer{} // no endpoints
-		rr        = lb.NewRoundRobin(endpoints)
+		endpoints = sd.FixedEndpointer[any, any]{} // no endpoints
+		rr        = lb.NewRoundRobin[any, any](endpoints)
 		retry     = lb.RetryWithCallback(time.Second, rr, cb) // lots of retries
 		ctx       = context.Background()
 	)
@@ -115,8 +115,8 @@ func TestErrorPassedUnchangedToCallback(t *testing.T) {
 		endpoint = func(ctx context.Context, request interface{}) (interface{}, error) {
 			return nil, myErr
 		}
-		endpoints = sd.FixedEndpointer{endpoint} // no endpoints
-		rr        = lb.NewRoundRobin(endpoints)
+		endpoints = sd.FixedEndpointer[any, any]{endpoint} // no endpoints
+		rr        = lb.NewRoundRobin[any, any](endpoints)
 		retry     = lb.RetryWithCallback(time.Second, rr, cb) // lots of retries
 		ctx       = context.Background()
 	)
@@ -128,10 +128,10 @@ func TestErrorPassedUnchangedToCallback(t *testing.T) {
 
 func TestHandleNilCallback(t *testing.T) {
 	var (
-		endpointer = sd.FixedEndpointer{
+		endpointer = sd.FixedEndpointer[any, any]{
 			func(context.Context, interface{}) (interface{}, error) { return struct{}{}, nil /* OK */ },
 		}
-		rr  = lb.NewRoundRobin(endpointer)
+		rr  = lb.NewRoundRobin[any, any](endpointer)
 		ctx = context.Background()
 	)
 	retry := lb.RetryWithCallback(time.Second, rr, nil)

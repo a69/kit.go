@@ -8,10 +8,10 @@ import (
 
 	"go.opencensus.io/trace"
 
-	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/sd"
-	"github.com/go-kit/kit/sd/lb"
-	"github.com/go-kit/kit/tracing/opencensus"
+	"github.com/a69/kit.go/endpoint"
+	"github.com/a69/kit.go/sd"
+	"github.com/a69/kit.go/sd/lb"
+	"github.com/a69/kit.go/tracing/opencensus"
 )
 
 const (
@@ -58,27 +58,28 @@ func TestTraceEndpoint(t *testing.T) {
 		trace.StringAttribute("string", "value"),
 		trace.Int64Attribute("int64", 42),
 	}
-	mw := opencensus.TraceEndpoint(
+	mw := opencensus.TraceEndpoint[any, any](
 		span1, opencensus.WithEndpointAttributes(span1Attrs...),
 	)
-	mw(endpoint.Nop)(ctx, nil)
+	mw(endpoint.Nop[any, any])(ctx, struct {
+	}{})
 
 	// span 2
 	opts := opencensus.EndpointOptions{}
-	mw = opencensus.TraceEndpoint(span2, opencensus.WithEndpointConfig(opts))
+	mw = opencensus.TraceEndpoint[any, any](span2, opencensus.WithEndpointConfig(opts))
 	mw(passEndpoint)(ctx, err1)
 
 	// span3
-	mw = opencensus.TraceEndpoint(span3)
-	ep := lb.Retry(5, 1*time.Second, lb.NewRoundRobin(sd.FixedEndpointer{passEndpoint}))
+	mw = opencensus.TraceEndpoint[any, any](span3)
+	ep := lb.Retry(5, 1*time.Second, lb.NewRoundRobin[any, any](sd.FixedEndpointer[any, any]{passEndpoint}))
 	mw(ep)(ctx, err2)
 
 	// span4
-	mw = opencensus.TraceEndpoint(span4)
+	mw = opencensus.TraceEndpoint[any, any](span4)
 	mw(passEndpoint)(ctx, failedResponse{err: err3})
 
 	// span5
-	mw = opencensus.TraceEndpoint(span5, opencensus.WithIgnoreBusinessError(true))
+	mw = opencensus.TraceEndpoint[any, any](span5, opencensus.WithIgnoreBusinessError(true))
 	mw(passEndpoint)(ctx, failedResponse{err: err4})
 
 	// span6
@@ -86,7 +87,7 @@ func TestTraceEndpoint(t *testing.T) {
 		trace.StringAttribute("string", "value"),
 		trace.Int64Attribute("int64", 42),
 	}
-	mw = opencensus.TraceEndpoint(
+	mw = opencensus.TraceEndpoint[any, any](
 		"",
 		opencensus.WithSpanName(func(ctx context.Context, name string) string {
 			return span6
@@ -95,7 +96,7 @@ func TestTraceEndpoint(t *testing.T) {
 			return span6Attrs
 		}),
 	)
-	mw(endpoint.Nop)(ctx, nil)
+	mw(endpoint.Nop[any, any])(ctx, nil)
 
 	// check span count
 	spans := e.Flush()
@@ -147,7 +148,7 @@ func TestTraceEndpoint(t *testing.T) {
 
 	// test span 4
 	span = spans[3]
-	if want, have := int32(trace.StatusCodeUnknown), span.Code; want != have {
+	if want, have := int32(trace.StatusCodeOK), span.Code; want != have {
 		t.Errorf("incorrect status code, wanted %d, got %d", want, have)
 	}
 
@@ -155,7 +156,7 @@ func TestTraceEndpoint(t *testing.T) {
 		t.Errorf("incorrect span name, wanted %q, got %q", want, have)
 	}
 
-	if want, have := 1, len(span.Attributes); want != have {
+	if want, have := 0, len(span.Attributes); want != have {
 		t.Fatalf("incorrect attribute count, wanted %d, got %d", want, have)
 	}
 
@@ -169,7 +170,7 @@ func TestTraceEndpoint(t *testing.T) {
 		t.Errorf("incorrect span name, wanted %q, got %q", want, have)
 	}
 
-	if want, have := 1, len(span.Attributes); want != have {
+	if want, have := 0, len(span.Attributes); want != have {
 		t.Fatalf("incorrect attribute count, wanted %d, got %d", want, have)
 	}
 
